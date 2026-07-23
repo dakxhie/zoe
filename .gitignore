@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment
+.env
+.env.*
+
+# VS Code
+.vscode/
+
+# AI Models
+models/
+*.gguf
+*.bin
+*.safetensors
+*.pt
+*.pth
+
+# Vector Databases
+chroma/
+faiss/
+vector_db/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
