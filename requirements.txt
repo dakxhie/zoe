@@ -1,0 +1,10 @@
+typer
+rich
+python-dotenv
+requests
+huggingface_hub
+transformers
+sentence-transformers
+chromadb
+pypdf
+tqdm
