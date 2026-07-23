@@ -1,0 +1,9 @@
+# Zoe Configuration
+
+MODEL_NAME=Qwen/Qwen2.5-3B-Instruct
+
+MEMORY_DB=storage/chroma
+
+PDF_FOLDER=data/pdfs
+
+NOTES_FOLDER=data/notes
