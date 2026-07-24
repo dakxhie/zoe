@@ -43,10 +43,11 @@ def _model_device(loaded_model: PreTrainedModel) -> torch.device:
     return next(loaded_model.parameters()).device
 
 
-def _format_prompt(loaded_tokenizer: PreTrainedTokenizerBase, prompt: str) -> str:
-    """Format the user prompt with the tokenizer chat template when supported."""
-    messages = [{"role": "user", "content": prompt}]
-
+def _format_prompt(
+    loaded_tokenizer: PreTrainedTokenizerBase,
+    messages: list[dict[str, str]],
+) -> str:
+    """Format chat messages with the tokenizer chat template when supported."""
     if getattr(loaded_tokenizer, "chat_template", None):
         return loaded_tokenizer.apply_chat_template(
             messages,
@@ -54,7 +55,7 @@ def _format_prompt(loaded_tokenizer: PreTrainedTokenizerBase, prompt: str) -> st
             add_generation_prompt=True,
         )
 
-    return prompt
+    return messages[-1]["content"]
 
 
 def _retrieve_context(user_prompt: str, top_k: int = 3) -> list[dict[str, str]]:
@@ -71,28 +72,31 @@ def _format_retrieved_notes(notes: list[dict[str, str]]) -> str:
     return "\n\n".join(note["content"] for note in notes)
 
 
-def _build_rag_prompt(user_question: str, context: str) -> str:
-    """Build the RAG-augmented prompt using retrieved note context."""
-    return (
-        "You are Zoe.\n\n"
-        "Use the following context to answer.\n\n"
-        "Context:\n\n"
-        f"{context}\n\n"
-        "If the answer is not contained in the context, answer normally.\n\n"
-        f"User:\n\n{user_question}"
-    )
-
-
-def _build_generation_prompt(user_prompt: str) -> str:
-    """Prepare the prompt passed to the model, injecting RAG context when available."""
+def _build_chat_messages(user_question: str) -> list[dict[str, str]]:
+    """Build chat messages, injecting retrieved note context when available."""
     # RAG injection: search personal notes before every response.
-    retrieved_notes = _retrieve_context(user_prompt, top_k=3)
+    retrieved_notes = _retrieve_context(user_question, top_k=3)
 
     if not retrieved_notes:
-        return user_prompt
+        return [{"role": "user", "content": user_question}]
 
     context = _format_retrieved_notes(retrieved_notes)
-    return _build_rag_prompt(user_prompt, context)
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are Zoe.\n"
+                "Answer using the provided context whenever possible.\n"
+                "If the answer is not in the context, answer normally.\n\n"
+                "Context:\n"
+                + context
+            ),
+        },
+        {
+            "role": "user",
+            "content": user_question,
+        },
+    ]
 
 
 def load_model() -> tuple[PreTrainedTokenizerBase, PreTrainedModel]:
@@ -144,9 +148,9 @@ def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
     """Generate an assistant reply for the given user prompt."""
     loaded_tokenizer, loaded_model = load_model()
 
-    # RAG injection point: augment the user prompt with retrieved notes.
-    generation_prompt = _build_generation_prompt(prompt)
-    text = _format_prompt(loaded_tokenizer, generation_prompt)
+    # RAG injection point: build chat messages with retrieved note context.
+    messages = _build_chat_messages(prompt)
+    text = _format_prompt(loaded_tokenizer, messages)
     device = _model_device(loaded_model)
     inputs: Any = loaded_tokenizer(text, return_tensors="pt").to(device)
 
