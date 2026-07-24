@@ -1,24 +1,21 @@
 # About Me
 
-Name:
-Dakshitha
+Name: Dakshitha
 
-Languages:
-English
-Tamil
-Tanglish
+Favorite programming language: Python
+
+Current Project: Zoe AI
 
 Goal:
-Build Zoe into my lifelong AI companion.
+Build my own AGI assistant.
 
-Teaching Style:
-Step by step.
+Favorite Movie:
+Harry Potter
 
-Coding Style:
-Production quality.
+Country:
+India
 
 Interests:
+Artificial Intelligence
 Programming
-AI
-Psychology
-Business
+Web Development
