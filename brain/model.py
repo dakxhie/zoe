@@ -8,10 +8,16 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizerBase
 
 from core.config import load_settings
+from memory.retriever import search_memories
+from memory.store import save_memory
 from rag.retriever import search
 
 tokenizer: PreTrainedTokenizerBase | None = None
 model: PreTrainedModel | None = None
+
+MEMORY_ACKNOWLEDGEMENT = "Got it. I'll remember that."
+NOTES_HEADING = "===== Personal Notes ====="
+MEMORIES_HEADING = "===== Learned Memories ====="
 
 
 class ModelLoadError(RuntimeError):
@@ -58,29 +64,51 @@ def _format_prompt(
     return messages[-1]["content"]
 
 
-def _retrieve_context(user_prompt: str, top_k: int = 3) -> list[dict[str, str]]:
-    """Retrieve relevant personal notes from ChromaDB for RAG."""
+def _retrieve_notes(user_prompt: str, top_k: int = 3) -> list[dict[str, str]]:
+    """Retrieve relevant personal notes from the RAG index."""
     try:
         return search(user_prompt, top_k=top_k)
     except Exception:
-        # If retrieval is unavailable, generation falls back to the normal prompt.
         return []
 
 
-def _format_retrieved_notes(notes: list[dict[str, str]]) -> str:
-    """Join retrieved note content into one context block."""
-    return "\n\n".join(note["content"] for note in notes)
+def _retrieve_memories(user_prompt: str, top_k: int = 3) -> list[dict[str, str]]:
+    """Retrieve relevant learned conversation memories."""
+    try:
+        return search_memories(user_prompt, top_k=top_k)
+    except Exception:
+        return []
+
+
+def _join_content(items: list[dict[str, str]]) -> str:
+    """Join retrieved document content into one text block."""
+    return "\n\n".join(item["content"] for item in items)
+
+
+def _build_merged_context(user_prompt: str) -> str:
+    """Merge note and memory retrieval results into one context string."""
+    # RAG + memory injection: search both sources before every response.
+    notes = _retrieve_notes(user_prompt, top_k=3)
+    memories = _retrieve_memories(user_prompt, top_k=3)
+
+    sections: list[str] = []
+
+    if notes:
+        sections.append(f"{NOTES_HEADING}\n\n{_join_content(notes)}")
+
+    if memories:
+        sections.append(f"{MEMORIES_HEADING}\n\n{_join_content(memories)}")
+
+    return "\n\n".join(sections)
 
 
 def _build_chat_messages(user_question: str) -> list[dict[str, str]]:
-    """Build chat messages, injecting retrieved note context when available."""
-    # RAG injection: search personal notes before every response.
-    retrieved_notes = _retrieve_context(user_question, top_k=3)
+    """Build chat messages, injecting merged note and memory context when available."""
+    context = _build_merged_context(user_question)
 
-    if not retrieved_notes:
+    if not context:
         return [{"role": "user", "content": user_question}]
 
-    context = _format_retrieved_notes(retrieved_notes)
     return [
         {
             "role": "system",
@@ -97,6 +125,14 @@ def _build_chat_messages(user_question: str) -> list[dict[str, str]]:
             "content": user_question,
         },
     ]
+
+
+def _try_save_memory(text: str) -> bool:
+    """Attempt to store a conversation memory without interrupting chat."""
+    try:
+        return save_memory(text)
+    except Exception:
+        return False
 
 
 def load_model() -> tuple[PreTrainedTokenizerBase, PreTrainedModel]:
@@ -146,9 +182,13 @@ def load_model() -> tuple[PreTrainedTokenizerBase, PreTrainedModel]:
 
 def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
     """Generate an assistant reply for the given user prompt."""
+    # Memory storage injection: save personal messages before generation.
+    if _try_save_memory(prompt):
+        return MEMORY_ACKNOWLEDGEMENT
+
     loaded_tokenizer, loaded_model = load_model()
 
-    # RAG injection point: build chat messages with retrieved note context.
+    # RAG + memory injection point: build chat messages with merged context.
     messages = _build_chat_messages(prompt)
     text = _format_prompt(loaded_tokenizer, messages)
     device = _model_device(loaded_model)
