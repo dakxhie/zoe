@@ -1,10 +1,18 @@
+# Core runtime
 typer
 rich
 python-dotenv
-requests
-huggingface_hub
+
+# Model inference (Colab GPU + local CUDA)
+torch
 transformers
+huggingface_hub
+
+# Planned for Sprint 1.2+ (memory, RAG, PDF ingestion)
 sentence-transformers
 chromadb
 pypdf
+
+# Utilities
+requests
 tqdm

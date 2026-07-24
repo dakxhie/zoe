@@ -1,63 +1,115 @@
-from transformers import AutoTokenizer, AutoModelForCausalLM
+"""Hugging Face model loading and chat generation for Zoe AI."""
+
+from __future__ import annotations
+
+from typing import Any
+
 import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizerBase
 
 from core.config import load_settings
 
-settings = load_settings()
+tokenizer: PreTrainedTokenizerBase | None = None
+model: PreTrainedModel | None = None
 
-MODEL_NAME = settings["MODEL_NAME"]
 
-tokenizer = None
-model = None
+class ModelLoadError(RuntimeError):
+    """Raised when the configured Hugging Face model cannot be loaded."""
 
-def load_model():
+
+def _get_model_name() -> str:
+    """Read MODEL_NAME from config/settings.txt via core.config."""
+    model_name = load_settings().get("MODEL_NAME")
+    if not model_name:
+        raise ModelLoadError("MODEL_NAME is missing from config/settings.txt.")
+    return model_name
+
+
+def _use_cuda() -> bool:
+    """Return True when a CUDA GPU is available for inference."""
+    return torch.cuda.is_available()
+
+
+def _torch_dtype() -> torch.dtype:
+    """Use half precision on GPU and full precision on CPU."""
+    return torch.float16 if _use_cuda() else torch.float32
+
+
+def _model_device(loaded_model: PreTrainedModel) -> torch.device:
+    """Resolve the device where model weights live."""
+    if hasattr(loaded_model, "device"):
+        return loaded_model.device
+    return next(loaded_model.parameters()).device
+
+
+def _format_prompt(loaded_tokenizer: PreTrainedTokenizerBase, prompt: str) -> str:
+    """Format the user prompt with the tokenizer chat template when supported."""
+    messages = [{"role": "user", "content": prompt}]
+
+    if getattr(loaded_tokenizer, "chat_template", None):
+        return loaded_tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+
+    return prompt
+
+
+def load_model() -> tuple[PreTrainedTokenizerBase, PreTrainedModel]:
+    """Load the configured Hugging Face model once and reuse it."""
     global tokenizer, model
 
     if tokenizer is not None and model is not None:
         return tokenizer, model
 
-    print(f"Loading {MODEL_NAME}...")
+    model_name = _get_model_name()
+    device_label = "CUDA GPU" if _use_cuda() else "CPU"
+    print(f"Loading {model_name} on {device_label}...")
 
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    try:
+        loaded_tokenizer = AutoTokenizer.from_pretrained(model_name)
+        dtype = _torch_dtype()
 
-    model = AutoModelForCausalLM.from_pretrained(
-        MODEL_NAME,
-        torch_dtype=torch.float16,
-        device_map="auto"
-    )
+        if _use_cuda():
+            loaded_model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                torch_dtype=dtype,
+                device_map="auto",
+            )
+        else:
+            loaded_model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                torch_dtype=dtype,
+            )
+            loaded_model.to("cpu")
 
-    print("✅ Zoe is ready!")
+    except OSError as exc:
+        raise ModelLoadError(
+            f"Could not download or load '{model_name}'. Check the name and your connection."
+        ) from exc
+    except Exception as exc:
+        raise ModelLoadError(
+            f"Failed to load '{model_name}': {exc}"
+        ) from exc
+
+    tokenizer = loaded_tokenizer
+    model = loaded_model
+
+    print("Zoe is ready!")
 
     return tokenizer, model
 
 
-def generate_response(prompt: str, max_new_tokens: int = 256):
+def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
+    """Generate an assistant reply for the given user prompt."""
+    loaded_tokenizer, loaded_model = load_model()
 
-    tokenizer, model = load_model()
+    text = _format_prompt(loaded_tokenizer, prompt)
+    device = _model_device(loaded_model)
+    inputs: Any = loaded_tokenizer(text, return_tensors="pt").to(device)
 
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are Zoe, a friendly, intelligent AI companion. "
-                "Answer naturally, clearly, and helpfully."
-            )
-        },
-        {
-            "role": "user",
-            "content": prompt
-        }
-    ]
-
-    text = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True
-    )
-
-    inputs = tokenizer(text, return_tensors="pt").to(model.device)
-
-    outputs = model.generate(
+    outputs = loaded_model.generate(
         **inputs,
         max_new_tokens=max_new_tokens,
         do_sample=True,
@@ -65,9 +117,10 @@ def generate_response(prompt: str, max_new_tokens: int = 256):
         top_p=0.9,
     )
 
-    response = tokenizer.decode(
-        outputs[0][inputs.input_ids.shape[1]:],
-        skip_special_tokens=True
+    input_length = inputs.input_ids.shape[1]
+    response = loaded_tokenizer.decode(
+        outputs[0][input_length:],
+        skip_special_tokens=True,
     )
 
     return response.strip()
