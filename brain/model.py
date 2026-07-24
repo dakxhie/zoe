@@ -8,6 +8,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizerBase
 
 from core.config import load_settings
+from rag.retriever import search
 
 tokenizer: PreTrainedTokenizerBase | None = None
 model: PreTrainedModel | None = None
@@ -54,6 +55,44 @@ def _format_prompt(loaded_tokenizer: PreTrainedTokenizerBase, prompt: str) -> st
         )
 
     return prompt
+
+
+def _retrieve_context(user_prompt: str, top_k: int = 3) -> list[dict[str, str]]:
+    """Retrieve relevant personal notes from ChromaDB for RAG."""
+    try:
+        return search(user_prompt, top_k=top_k)
+    except Exception:
+        # If retrieval is unavailable, generation falls back to the normal prompt.
+        return []
+
+
+def _format_retrieved_notes(notes: list[dict[str, str]]) -> str:
+    """Join retrieved note content into one context block."""
+    return "\n\n".join(note["content"] for note in notes)
+
+
+def _build_rag_prompt(user_question: str, context: str) -> str:
+    """Build the RAG-augmented prompt using retrieved note context."""
+    return (
+        "You are Zoe.\n\n"
+        "Use the following context to answer.\n\n"
+        "Context:\n\n"
+        f"{context}\n\n"
+        "If the answer is not contained in the context, answer normally.\n\n"
+        f"User:\n\n{user_question}"
+    )
+
+
+def _build_generation_prompt(user_prompt: str) -> str:
+    """Prepare the prompt passed to the model, injecting RAG context when available."""
+    # RAG injection: search personal notes before every response.
+    retrieved_notes = _retrieve_context(user_prompt, top_k=3)
+
+    if not retrieved_notes:
+        return user_prompt
+
+    context = _format_retrieved_notes(retrieved_notes)
+    return _build_rag_prompt(user_prompt, context)
 
 
 def load_model() -> tuple[PreTrainedTokenizerBase, PreTrainedModel]:
@@ -105,7 +144,9 @@ def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
     """Generate an assistant reply for the given user prompt."""
     loaded_tokenizer, loaded_model = load_model()
 
-    text = _format_prompt(loaded_tokenizer, prompt)
+    # RAG injection point: augment the user prompt with retrieved notes.
+    generation_prompt = _build_generation_prompt(prompt)
+    text = _format_prompt(loaded_tokenizer, generation_prompt)
     device = _model_device(loaded_model)
     inputs: Any = loaded_tokenizer(text, return_tensors="pt").to(device)
 
