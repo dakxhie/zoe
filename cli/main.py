@@ -12,6 +12,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from brain.model import ModelLoadError, generate_response
+from code.indexer import build_code_index
+from pdf.indexer import build_pdf_index
+from rag.retriever import build_index
 
 app = typer.Typer()
 
@@ -76,9 +79,33 @@ def train() -> None:
 
 
 @app.command()
+def code(project_path: str) -> None:
+    """Index a project's source code."""
+    print("Scanning project...")
+    indexed_files, indexed_chunks = build_code_index(project_path)
+    print(f"Indexed {indexed_files} files")
+    print(f"Indexed {indexed_chunks} chunks")
+    print("Done.")
+
+
+@app.command()
 def ingest() -> None:
-    """Placeholder for future PDF ingestion support."""
-    print("PDF ingestion coming soon.")
+    """Build the notes and PDF indexes."""
+    print("--------------------------------")
+    print()
+    print("Building Notes Index...")
+    print()
+    indexed_notes = build_index()
+    print(f"Indexed Notes: {indexed_notes}")
+    print()
+    print("Building PDF Index...")
+    print()
+    indexed_pdf_chunks = build_pdf_index()
+    print(f"Indexed PDF Chunks: {indexed_pdf_chunks}")
+    print()
+    print("Done.")
+    print()
+    print("--------------------------------")
 
 
 if __name__ == "__main__":

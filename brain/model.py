@@ -7,17 +7,21 @@ from typing import Any
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizerBase
 
+from code.retriever import search_code
 from core.config import load_settings
 from memory.retriever import search_memories
 from memory.store import save_memory
+from pdf.retriever import search_documents
 from rag.retriever import search
 
 tokenizer: PreTrainedTokenizerBase | None = None
 model: PreTrainedModel | None = None
 
 MEMORY_ACKNOWLEDGEMENT = "Got it. I'll remember that."
-NOTES_HEADING = "===== Personal Notes ====="
-MEMORIES_HEADING = "===== Learned Memories ====="
+NOTES_HEADING = "========================\nPersonal Notes\n========================"
+MEMORIES_HEADING = "========================\nLearned Memories\n========================"
+PDF_HEADING = "========================\nPDF Documents\n========================"
+CODE_HEADING = "========================\nCode\n========================"
 
 
 class ModelLoadError(RuntimeError):
@@ -80,16 +84,34 @@ def _retrieve_memories(user_prompt: str, top_k: int = 3) -> list[dict[str, str]]
         return []
 
 
-def _join_content(items: list[dict[str, str]]) -> str:
+def _retrieve_documents(user_prompt: str, top_k: int = 5) -> list[dict[str, str | int]]:
+    """Retrieve relevant PDF document chunks."""
+    try:
+        return search_documents(user_prompt, top_k=top_k)
+    except Exception:
+        return []
+
+
+def _retrieve_code(user_prompt: str, top_k: int = 5) -> list[dict[str, str]]:
+    """Retrieve relevant indexed code chunks."""
+    try:
+        return search_code(user_prompt, top_k=top_k)
+    except Exception:
+        return []
+
+
+def _join_content(items: list[dict[str, str | int]]) -> str:
     """Join retrieved document content into one text block."""
     return "\n\n".join(item["content"] for item in items)
 
 
 def _build_merged_context(user_prompt: str) -> str:
-    """Merge note and memory retrieval results into one context string."""
-    # RAG + memory injection: search both sources before every response.
+    """Merge note, memory, PDF, and code retrieval results into one context string."""
+    # RAG + memory + PDF + code injection: search all sources before every response.
     notes = _retrieve_notes(user_prompt, top_k=3)
     memories = _retrieve_memories(user_prompt, top_k=3)
+    documents = _retrieve_documents(user_prompt, top_k=5)
+    code_results = _retrieve_code(user_prompt, top_k=5)
 
     sections: list[str] = []
 
@@ -99,11 +121,17 @@ def _build_merged_context(user_prompt: str) -> str:
     if memories:
         sections.append(f"{MEMORIES_HEADING}\n\n{_join_content(memories)}")
 
+    if documents:
+        sections.append(f"{PDF_HEADING}\n\n{_join_content(documents)}")
+
+    if code_results:
+        sections.append(f"{CODE_HEADING}\n\n{_join_content(code_results)}")
+
     return "\n\n".join(sections)
 
 
 def _build_chat_messages(user_question: str) -> list[dict[str, str]]:
-    """Build chat messages, injecting merged note and memory context when available."""
+    """Build chat messages, injecting merged note, memory, PDF, and code context when available."""
     context = _build_merged_context(user_question)
 
     if not context:
@@ -188,7 +216,7 @@ def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
 
     loaded_tokenizer, loaded_model = load_model()
 
-    # RAG + memory injection point: build chat messages with merged context.
+    # RAG + memory + PDF + code injection point: build chat messages with merged context.
     messages = _build_chat_messages(prompt)
     text = _format_prompt(loaded_tokenizer, messages)
     device = _model_device(loaded_model)
