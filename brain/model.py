@@ -23,7 +23,7 @@ from brain.context import (
     _retrieve_notes,
     _truncate_text,
 )
-from brain.generation import ModelLoadError, load_model, model, tokenizer
+from brain.generation import ModelLoadError, get_model_load_count, is_model_loaded, load_model, model, tokenizer
 from brain.pipeline import generate_response
 
 __all__ = [
@@ -48,6 +48,8 @@ __all__ = [
     "_retrieve_notes",
     "_truncate_text",
     "generate_response",
+    "get_model_load_count",
+    "is_model_loaded",
     "load_model",
     "model",
     "tokenizer",

@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 
 from codebase.retriever import search_code
+from core.chroma import collection_count
+from core.index_status import EMPTY_INDEX_MESSAGES, TOOL_COLLECTIONS
 from memory.retriever import search_memories
 from pdf.retriever import search_documents
 from rag.retriever import search
@@ -20,6 +22,24 @@ CODE_HEADING = "========================\nCode\n========================"
 
 MAX_CONTEXT_CHARS = 6000
 MAX_ITEM_CHARS = 1500
+
+
+def _empty_index_message(tool: str) -> str | None:
+    """Return a user-facing message when the routed index is empty."""
+    collection_name = TOOL_COLLECTIONS.get(tool)
+    if collection_name is None:
+        return None
+
+    if collection_count(collection_name) == 0:
+        return EMPTY_INDEX_MESSAGES[tool]
+
+    return None
+
+
+def get_empty_index_response(user_prompt: str) -> str | None:
+    """Return a direct empty-index response when the routed index has no data."""
+    tool = route_query(user_prompt)
+    return _empty_index_message(tool)
 
 
 def _retrieve_notes(user_prompt: str, top_k: int = 3) -> list[dict[str, str]]:
@@ -128,6 +148,10 @@ def _build_merged_context(user_prompt: str) -> str:
     if tool == "chat":
         return ""
 
+    empty_message = _empty_index_message(tool)
+    if empty_message is not None:
+        return empty_message
+
     results = _retrieve_for_tool(tool, user_prompt)
     heading = _heading_for_tool(tool)
     if not heading or not results:
@@ -138,6 +162,18 @@ def _build_merged_context(user_prompt: str) -> str:
 
     merged = "\n\n".join(sections)
     return _truncate_text(merged, MAX_CONTEXT_CHARS)
+
+
+def _build_analysis_system_content(context: str) -> str:
+    """Build the system prompt for project analysis using gathered context."""
+    return (
+        "You are Zoe.\n"
+        "The user asked for a project analysis.\n"
+        "Answer using ONLY the provided project analysis context below.\n"
+        "Do not ask the user for more files, code, or project details.\n"
+        "Summarize the architecture and recommend concrete improvements.\n\n"
+        f"Context:\n{context}"
+    )
 
 
 def _build_system_content(context: str) -> str:
@@ -162,11 +198,13 @@ def _build_chat_messages(
     """Build chat messages with system context, history, and the current user turn."""
     if analysis_context:
         context = _truncate_text(analysis_context, MAX_CONTEXT_CHARS)
+        system_content = _build_analysis_system_content(context)
     else:
         context = _build_merged_context(user_question)
+        system_content = _build_system_content(context)
 
     messages: list[dict[str, str]] = [
-        {"role": "system", "content": _build_system_content(context)},
+        {"role": "system", "content": system_content},
     ]
     messages.extend(history)
     messages.append({"role": "user", "content": user_question})

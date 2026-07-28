@@ -11,6 +11,7 @@ from core.config import load_settings
 
 tokenizer: PreTrainedTokenizerBase | None = None
 model: PreTrainedModel | None = None
+_model_load_count: int = 0
 
 
 class ModelLoadError(RuntimeError):
@@ -57,9 +58,19 @@ def _format_prompt(
     return messages[-1]["content"]
 
 
+def is_model_loaded() -> bool:
+    """Return True when the model and tokenizer are cached in memory."""
+    return tokenizer is not None and model is not None
+
+
+def get_model_load_count() -> int:
+    """Return how many times the model weights were loaded in this process."""
+    return _model_load_count
+
+
 def load_model() -> tuple[PreTrainedTokenizerBase, PreTrainedModel]:
     """Load the configured Hugging Face model once and reuse it."""
-    global tokenizer, model
+    global tokenizer, model, _model_load_count
 
     if tokenizer is not None and model is not None:
         return tokenizer, model
@@ -96,6 +107,7 @@ def load_model() -> tuple[PreTrainedTokenizerBase, PreTrainedModel]:
 
     tokenizer = loaded_tokenizer
     model = loaded_model
+    _model_load_count += 1
 
     print("Zoe is ready!")
 

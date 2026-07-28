@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
+
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 
 import chromadb
 from chromadb.api.models.Collection import Collection
+from chromadb.config import Settings
 
 from core.config import ROOT, load_settings
+
+logging.getLogger("chromadb.telemetry.product.posthog").setLevel(logging.CRITICAL)
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +48,10 @@ def get_chroma_client() -> chromadb.PersistentClient:
     chroma_path = get_chroma_path()
 
     try:
-        _client = chromadb.PersistentClient(path=str(chroma_path))
+        _client = chromadb.PersistentClient(
+            path=str(chroma_path),
+            settings=Settings(anonymized_telemetry=False),
+        )
     except Exception as exc:
         raise ChromaError(f"Could not open ChromaDB at '{chroma_path}': {exc}") from exc
 
@@ -79,3 +88,11 @@ def existing_document_texts(collection: Collection) -> set[str]:
 def filter_new_ids(item_ids: list[str], known_ids: set[str]) -> list[str]:
     """Return ids that are not already indexed."""
     return [item_id for item_id in item_ids if item_id not in known_ids]
+
+
+def collection_count(name: str) -> int:
+    """Return the number of documents in a named collection."""
+    try:
+        return get_collection(name).count()
+    except ChromaError:
+        return 0

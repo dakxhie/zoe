@@ -9,7 +9,7 @@ from memory.history import add_message, get_history
 from memory.store import save_memory
 from tools.executor import execute_tool
 
-from brain.context import MEMORY_ACKNOWLEDGEMENT, _build_chat_messages
+from brain.context import MEMORY_ACKNOWLEDGEMENT, _build_chat_messages, get_empty_index_response
 from brain.generation import generate_text, load_model
 
 logger = logging.getLogger(__name__)
@@ -43,10 +43,17 @@ def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
         _record_exchange(prompt, tool_result)
         return tool_result
 
+    is_analysis, analysis_context = run_project_analysis(prompt)
+
+    if not is_analysis:
+        empty_index_response = get_empty_index_response(prompt)
+        if empty_index_response is not None:
+            _record_exchange(prompt, empty_index_response)
+            return empty_index_response
+
     loaded_tokenizer, loaded_model = load_model()
 
     history = get_history()
-    is_analysis, analysis_context = run_project_analysis(prompt)
     messages = _build_chat_messages(
         prompt,
         history,

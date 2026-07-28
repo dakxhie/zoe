@@ -17,6 +17,7 @@ if str(ROOT) not in sys.path:
 
 from brain.model import ModelLoadError, generate_response
 from codebase.indexer import build_code_index
+from core.diagnostics import print_startup_diagnostics
 from pdf.indexer import build_pdf_index
 from rag.retriever import build_index
 
@@ -48,6 +49,8 @@ def _should_exit(user_input: str) -> bool:
 def _run_chat_loop() -> None:
     """Run the interactive chat session until the user exits."""
     _print_welcome()
+    print_startup_diagnostics()
+    print()
 
     while True:
         user_input = _read_user_input()

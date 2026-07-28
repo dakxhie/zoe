@@ -81,5 +81,6 @@ def execute_project_analysis(query: str) -> str:
         "Important Files:\n"
         f"{files_section}\n\n"
         "Instructions:\n"
-        "Summarize the project architecture and recommend concrete improvements."
+        "Use the project analysis context above to summarize the architecture "
+        "and recommend concrete improvements. Do not ask the user for more files or code."
     )
