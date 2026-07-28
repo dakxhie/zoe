@@ -2,59 +2,29 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import logging
 from typing import Any
 
-import chromadb
 from chromadb.api.models.Collection import Collection
 
-from core.config import ROOT, load_settings
+from core.chroma import ChromaError, existing_ids, get_collection
 from rag.embedder import embed_texts
 from rag.loader import Document, DocumentLoadError, load_documents
 
 COLLECTION_NAME = "zoe_notes"
+logger = logging.getLogger(__name__)
 
 
 class RetrieverError(RuntimeError):
     """Raised when indexing or search operations fail."""
 
 
-def _get_chroma_path() -> Path:
-    """Return the absolute path to the persistent ChromaDB directory."""
-    settings = load_settings()
-    db_path = settings.get("MEMORY_DB", "storage/chroma")
-    chroma_path = Path(db_path)
-
-    if not chroma_path.is_absolute():
-        chroma_path = ROOT / chroma_path
-
-    chroma_path.mkdir(parents=True, exist_ok=True)
-    return chroma_path
-
-
-def _get_client() -> chromadb.PersistentClient:
-    """Create a persistent ChromaDB client."""
-    try:
-        return chromadb.PersistentClient(path=str(_get_chroma_path()))
-    except Exception as exc:
-        raise RetrieverError(
-            f"Could not open ChromaDB at '{_get_chroma_path()}': {exc}"
-        ) from exc
-
-
 def _get_collection() -> Collection:
     """Get or create the Zoe notes collection."""
-    client = _get_client()
-    return client.get_or_create_collection(name=COLLECTION_NAME)
-
-
-def _existing_ids(collection: Collection) -> set[str]:
-    """Return document ids already stored in the collection."""
-    if collection.count() == 0:
-        return set()
-
-    stored = collection.get(include=[])
-    return set(stored["ids"])
+    try:
+        return get_collection(COLLECTION_NAME)
+    except ChromaError as exc:
+        raise RetrieverError(str(exc)) from exc
 
 
 def _filter_new_documents(
@@ -85,6 +55,7 @@ def _index_documents(collection: Collection, documents: list[Document]) -> int:
     except Exception as exc:
         raise RetrieverError(f"Failed to index documents: {exc}") from exc
 
+    logger.info("Indexed %s note document(s)", len(documents))
     return len(documents)
 
 
@@ -96,7 +67,7 @@ def build_index() -> int:
         raise RetrieverError(str(exc)) from exc
 
     collection = _get_collection()
-    new_documents = _filter_new_documents(documents, _existing_ids(collection))
+    new_documents = _filter_new_documents(documents, existing_ids(collection))
     return _index_documents(collection, new_documents)
 
 

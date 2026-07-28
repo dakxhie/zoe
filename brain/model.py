@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import torch
@@ -14,6 +15,8 @@ from memory.store import save_memory
 from pdf.retriever import search_documents
 from rag.retriever import search
 
+logger = logging.getLogger(__name__)
+
 tokenizer: PreTrainedTokenizerBase | None = None
 model: PreTrainedModel | None = None
 
@@ -22,6 +25,9 @@ NOTES_HEADING = "========================\nPersonal Notes\n=====================
 MEMORIES_HEADING = "========================\nLearned Memories\n========================"
 PDF_HEADING = "========================\nPDF Documents\n========================"
 CODE_HEADING = "========================\nCode\n========================"
+
+MAX_CONTEXT_CHARS = 6000
+MAX_ITEM_CHARS = 1500
 
 
 class ModelLoadError(RuntimeError):
@@ -72,7 +78,8 @@ def _retrieve_notes(user_prompt: str, top_k: int = 3) -> list[dict[str, str]]:
     """Retrieve relevant personal notes from the RAG index."""
     try:
         return search(user_prompt, top_k=top_k)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Notes retrieval failed: %s", exc)
         return []
 
 
@@ -80,7 +87,8 @@ def _retrieve_memories(user_prompt: str, top_k: int = 3) -> list[dict[str, str]]
     """Retrieve relevant learned conversation memories."""
     try:
         return search_memories(user_prompt, top_k=top_k)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Memory retrieval failed: %s", exc)
         return []
 
 
@@ -88,7 +96,8 @@ def _retrieve_documents(user_prompt: str, top_k: int = 5) -> list[dict[str, str 
     """Retrieve relevant PDF document chunks."""
     try:
         return search_documents(user_prompt, top_k=top_k)
-    except Exception:
+    except Exception as exc:
+        logger.warning("PDF retrieval failed: %s", exc)
         return []
 
 
@@ -96,13 +105,47 @@ def _retrieve_code(user_prompt: str, top_k: int = 5) -> list[dict[str, str]]:
     """Retrieve relevant indexed code chunks."""
     try:
         return search_code(user_prompt, top_k=top_k)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Code retrieval failed: %s", exc)
         return []
 
 
+def _truncate_text(text: str, limit: int) -> str:
+    """Truncate long context text safely."""
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3].rstrip() + "..."
+
+
 def _join_content(items: list[dict[str, str | int]]) -> str:
-    """Join retrieved document content into one text block."""
-    return "\n\n".join(item["content"] for item in items)
+    """Join retrieved document content into one bounded text block."""
+    if not items:
+        return ""
+
+    parts = [_truncate_text(str(item["content"]), MAX_ITEM_CHARS) for item in items]
+    joined = "\n\n".join(part for part in parts if part)
+
+    remaining = MAX_CONTEXT_CHARS
+    bounded_parts: list[str] = []
+
+    for part in parts:
+        if remaining <= 0:
+            break
+        if len(part) <= remaining:
+            bounded_parts.append(part)
+            remaining -= len(part) + 2
+            continue
+        bounded_parts.append(_truncate_text(part, remaining))
+        break
+
+    return "\n\n".join(bounded_parts) if bounded_parts else _truncate_text(joined, MAX_CONTEXT_CHARS)
+
+
+def _append_section(sections: list[str], heading: str, content: str) -> None:
+    """Append one context section when content is available."""
+    if not content.strip():
+        return
+    sections.append(f"{heading}\n\n{content}")
 
 
 def _build_merged_context(user_prompt: str) -> str:
@@ -114,20 +157,13 @@ def _build_merged_context(user_prompt: str) -> str:
     code_results = _retrieve_code(user_prompt, top_k=5)
 
     sections: list[str] = []
+    _append_section(sections, NOTES_HEADING, _join_content(notes))
+    _append_section(sections, MEMORIES_HEADING, _join_content(memories))
+    _append_section(sections, PDF_HEADING, _join_content(documents))
+    _append_section(sections, CODE_HEADING, _join_content(code_results))
 
-    if notes:
-        sections.append(f"{NOTES_HEADING}\n\n{_join_content(notes)}")
-
-    if memories:
-        sections.append(f"{MEMORIES_HEADING}\n\n{_join_content(memories)}")
-
-    if documents:
-        sections.append(f"{PDF_HEADING}\n\n{_join_content(documents)}")
-
-    if code_results:
-        sections.append(f"{CODE_HEADING}\n\n{_join_content(code_results)}")
-
-    return "\n\n".join(sections)
+    merged = "\n\n".join(sections)
+    return _truncate_text(merged, MAX_CONTEXT_CHARS)
 
 
 def _build_chat_messages(user_question: str) -> list[dict[str, str]]:
@@ -159,7 +195,8 @@ def _try_save_memory(text: str) -> bool:
     """Attempt to store a conversation memory without interrupting chat."""
     try:
         return save_memory(text)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Memory save failed: %s", exc)
         return False
 
 

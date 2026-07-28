@@ -2,20 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, TypedDict
 
-import chromadb
-from chromadb.api.models.Collection import Collection
-
-from core.config import ROOT, load_settings
+from core.chroma import ChromaError, existing_document_texts, get_collection
 from memory.detector import should_remember
 from rag.embedder import embed_texts
 
 COLLECTION_NAME = "zoe_memory"
 MEMORY_TYPE = "conversation_memory"
+logger = logging.getLogger(__name__)
 
 
 class MemoryRecord(TypedDict):
@@ -31,33 +29,12 @@ class MemoryStoreError(RuntimeError):
     """Raised when memory storage operations fail."""
 
 
-def _get_chroma_path() -> Path:
-    """Return the absolute path to the persistent ChromaDB directory."""
-    settings = load_settings()
-    db_path = settings.get("MEMORY_DB", "storage/chroma")
-    chroma_path = Path(db_path)
-
-    if not chroma_path.is_absolute():
-        chroma_path = ROOT / chroma_path
-
-    chroma_path.mkdir(parents=True, exist_ok=True)
-    return chroma_path
-
-
-def _get_client() -> chromadb.PersistentClient:
-    """Create a persistent ChromaDB client."""
-    try:
-        return chromadb.PersistentClient(path=str(_get_chroma_path()))
-    except Exception as exc:
-        raise MemoryStoreError(
-            f"Could not open ChromaDB at '{_get_chroma_path()}': {exc}"
-        ) from exc
-
-
-def _get_collection() -> Collection:
+def _get_collection():
     """Get or create the Zoe memory collection."""
-    client = _get_client()
-    return client.get_or_create_collection(name=COLLECTION_NAME)
+    try:
+        return get_collection(COLLECTION_NAME)
+    except ChromaError as exc:
+        raise MemoryStoreError(str(exc)) from exc
 
 
 def _utc_timestamp() -> str:
@@ -95,9 +72,25 @@ def _format_memory_records(results: dict[str, Any]) -> list[MemoryRecord]:
     return records
 
 
+def _memory_exists(collection, text: str) -> bool:
+    """Return True when the exact memory text is already stored."""
+    normalized = text.strip()
+    return normalized in existing_document_texts(collection)
+
+
 def save_memory(text: str) -> bool:
     """Save a conversation memory when it passes the detector rules."""
     if not should_remember(text):
+        return False
+
+    try:
+        collection = _get_collection()
+    except MemoryStoreError:
+        logger.warning("Memory save skipped because ChromaDB is unavailable")
+        return False
+
+    if _memory_exists(collection, text):
+        logger.debug("Skipped duplicate memory: %s", text[:80])
         return False
 
     memory_id = str(uuid.uuid4())
@@ -105,7 +98,6 @@ def save_memory(text: str) -> bool:
     metadata = _build_metadata(created_at)
 
     try:
-        collection = _get_collection()
         embeddings = embed_texts([text])
         collection.add(
             ids=[memory_id],
@@ -116,6 +108,7 @@ def save_memory(text: str) -> bool:
     except Exception as exc:
         raise MemoryStoreError(f"Failed to save memory: {exc}") from exc
 
+    logger.info("Saved conversation memory")
     return True
 
 

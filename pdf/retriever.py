@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, TypedDict
 
-import chromadb
-from chromadb.api.models.Collection import Collection
-
-from core.config import ROOT, load_settings
+from core.chroma import ChromaError, get_collection
 from rag.embedder import embed_texts
 
 COLLECTION_NAME = "zoe_documents"
@@ -26,33 +22,12 @@ class PDFRetrieverError(RuntimeError):
     """Raised when PDF document search fails."""
 
 
-def _get_chroma_path() -> Path:
-    """Return the absolute path to the persistent ChromaDB directory."""
-    settings = load_settings()
-    db_path = settings.get("MEMORY_DB", "storage/chroma")
-    chroma_path = Path(db_path)
-
-    if not chroma_path.is_absolute():
-        chroma_path = ROOT / chroma_path
-
-    chroma_path.mkdir(parents=True, exist_ok=True)
-    return chroma_path
-
-
-def _get_client() -> chromadb.PersistentClient:
-    """Create a persistent ChromaDB client."""
-    try:
-        return chromadb.PersistentClient(path=str(_get_chroma_path()))
-    except Exception as exc:
-        raise PDFRetrieverError(
-            f"Could not open ChromaDB at '{_get_chroma_path()}': {exc}"
-        ) from exc
-
-
-def _get_collection() -> Collection:
+def _get_collection():
     """Get or create the Zoe documents collection."""
-    client = _get_client()
-    return client.get_or_create_collection(name=COLLECTION_NAME)
+    try:
+        return get_collection(COLLECTION_NAME)
+    except ChromaError as exc:
+        raise PDFRetrieverError(str(exc)) from exc
 
 
 def _format_search_results(results: dict[str, Any]) -> list[PDFSearchResult]:

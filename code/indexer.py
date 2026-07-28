@@ -2,63 +2,35 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
-import chromadb
 from chromadb.api.models.Collection import Collection
 
 from code.chunker import CodeChunk, chunk_code
 from code.loader import CodeFile, CodeLoaderError, load_code
-from core.config import ROOT, load_settings
+from core.chroma import ChromaError, existing_document_texts, existing_ids, get_collection
+from core.indexing import prepare_new_chunks
 from rag.embedder import embed_texts
 
 COLLECTION_NAME = "zoe_code"
+logger = logging.getLogger(__name__)
 
 
 class CodeIndexerError(RuntimeError):
     """Raised when code indexing cannot proceed due to an unrecoverable error."""
 
 
-def _get_chroma_path() -> Path:
-    """Return the absolute path to the persistent ChromaDB directory."""
-    settings = load_settings()
-    db_path = settings.get("MEMORY_DB", "storage/chroma")
-    chroma_path = Path(db_path)
-
-    if not chroma_path.is_absolute():
-        chroma_path = ROOT / chroma_path
-
-    chroma_path.mkdir(parents=True, exist_ok=True)
-    return chroma_path
-
-
-def _get_client() -> chromadb.PersistentClient:
-    """Create a persistent ChromaDB client."""
-    try:
-        return chromadb.PersistentClient(path=str(_get_chroma_path()))
-    except Exception as exc:
-        raise CodeIndexerError(
-            f"Could not open ChromaDB at '{_get_chroma_path()}': {exc}"
-        ) from exc
-
-
 def _get_collection() -> Collection:
     """Get or create the Zoe code collection."""
-    client = _get_client()
-    return client.get_or_create_collection(name=COLLECTION_NAME)
+    try:
+        return get_collection(COLLECTION_NAME)
+    except ChromaError as exc:
+        raise CodeIndexerError(str(exc)) from exc
 
 
-def _existing_ids(collection: Collection) -> set[str]:
-    """Return chunk ids already stored in the collection."""
-    if collection.count() == 0:
-        return set()
-
-    stored = collection.get(include=[])
-    return set(stored["ids"])
-
-
-def _make_chunk_storage_id(file_id: str, chunk_number: int) -> str:
+def _make_chunk_storage_id(file_id: str, chunk_number: int, _chunk: CodeChunk) -> str:
     """Build a stable ChromaDB id for one code chunk."""
     safe_file_id = file_id.replace("/", "__")
     return f"{safe_file_id}_chunk_{chunk_number:04d}"
@@ -68,17 +40,16 @@ def _prepare_new_chunks(
     file_id: str,
     chunks: list[CodeChunk],
     known_ids: set[str],
+    known_texts: set[str],
 ) -> list[tuple[str, CodeChunk, int]]:
     """Return chunks that are not already indexed."""
-    pending: list[tuple[str, CodeChunk, int]] = []
-
-    for chunk_number, chunk in enumerate(chunks):
-        storage_id = _make_chunk_storage_id(file_id, chunk_number)
-        if storage_id in known_ids:
-            continue
-        pending.append((storage_id, chunk, chunk_number))
-
-    return pending
+    return prepare_new_chunks(
+        chunks,
+        lambda chunk_number, chunk: _make_chunk_storage_id(file_id, chunk_number, chunk),
+        known_ids,
+        known_texts,
+        lambda chunk: chunk["text"],
+    )
 
 
 def _index_chunk_batch(
@@ -102,13 +73,17 @@ def _index_chunk_batch(
         for _, chunk, chunk_number in pending_chunks
     ]
 
-    embeddings = embed_texts(texts)
-    collection.add(
-        ids=ids,
-        embeddings=embeddings,
-        documents=texts,
-        metadatas=metadatas,
-    )
+    try:
+        embeddings = embed_texts(texts)
+        collection.add(
+            ids=ids,
+            embeddings=embeddings,
+            documents=texts,
+            metadatas=metadatas,
+        )
+    except Exception as exc:
+        raise CodeIndexerError(f"Failed to index code chunks: {exc}") from exc
+
     return len(pending_chunks)
 
 
@@ -116,6 +91,7 @@ def _index_single_file(
     collection: Collection,
     code_file: CodeFile,
     known_ids: set[str],
+    known_texts: set[str],
 ) -> tuple[bool, int]:
     """Chunk and index one code file."""
     chunks = chunk_code(
@@ -126,7 +102,7 @@ def _index_single_file(
     if not chunks:
         return False, 0
 
-    pending_chunks = _prepare_new_chunks(code_file["id"], chunks, known_ids)
+    pending_chunks = _prepare_new_chunks(code_file["id"], chunks, known_ids, known_texts)
     indexed_count = _index_chunk_batch(collection, code_file, pending_chunks)
 
     for storage_id, _, _ in pending_chunks:
@@ -139,26 +115,40 @@ def build_code_index(project_path: str | Path) -> tuple[int, int]:
     """Load, chunk, embed, and store code files. Returns (files, chunks)."""
     try:
         code_files = load_code(project_path)
-    except CodeLoaderError:
+    except CodeLoaderError as exc:
+        logger.warning("Code indexing skipped: %s", exc)
         return 0, 0
 
     try:
         collection = _get_collection()
-    except CodeIndexerError:
+    except CodeIndexerError as exc:
+        logger.warning("Code indexing skipped: %s", exc)
         return 0, 0
 
-    known_ids = _existing_ids(collection)
+    known_ids = existing_ids(collection)
+    known_texts = existing_document_texts(collection)
     indexed_files = 0
     indexed_chunks = 0
 
     for code_file in code_files:
         try:
-            processed, chunk_count = _index_single_file(collection, code_file, known_ids)
-        except Exception:
+            processed, chunk_count = _index_single_file(
+                collection,
+                code_file,
+                known_ids,
+                known_texts,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Skipped code file '%s' during indexing: %s",
+                code_file["path"],
+                exc,
+            )
             continue
 
         if processed:
             indexed_files += 1
         indexed_chunks += chunk_count
 
+    logger.info("Indexed %s code file(s) and %s chunk(s)", indexed_files, indexed_chunks)
     return indexed_files, indexed_chunks
