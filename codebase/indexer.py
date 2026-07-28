@@ -8,8 +8,8 @@ from typing import Any
 
 from chromadb.api.models.Collection import Collection
 
-from code.chunker import CodeChunk, chunk_code
-from code.loader import CodeFile, CodeLoaderError, load_code
+from codebase.chunker import CodeChunk, chunk_code
+from codebase.loader import CodeFile, CodeLoaderError, load_code
 from core.chroma import ChromaError, existing_document_texts, existing_ids, get_collection
 from core.indexing import prepare_new_chunks
 from rag.embedder import embed_texts

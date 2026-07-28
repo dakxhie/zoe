@@ -10,8 +10,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.logging_config import configure_logging
-from code.indexer import build_code_index
-from code.retriever import search_code
+from codebase.indexer import build_code_index
+from codebase.retriever import search_code
 from memory.retriever import search_memories
 from memory.store import save_memory
 from pdf.indexer import build_pdf_index

@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from code.loader import CodeLoaderError, load_code
+from codebase.loader import CodeLoaderError, load_code
 
 
 def main() -> None:

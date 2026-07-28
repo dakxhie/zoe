@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from code.retriever import CodeRetrieverError, search_code
+from codebase.retriever import CodeRetrieverError, search_code
 
 SEARCH_QUERIES: tuple[str, ...] = (
     "load_model",

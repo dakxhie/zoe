@@ -1,9 +1,9 @@
 """Code intelligence utilities for Zoe AI."""
 
-from code.chunker import CodeChunk, chunk_code
-from code.indexer import CodeIndexerError, build_code_index
-from code.loader import CodeFile, CodeLoaderError, load_code
-from code.retriever import CodeRetrieverError, CodeSearchResult, search_code
+from codebase.chunker import CodeChunk, chunk_code
+from codebase.indexer import CodeIndexerError, build_code_index
+from codebase.loader import CodeFile, CodeLoaderError, load_code
+from codebase.retriever import CodeRetrieverError, CodeSearchResult, search_code
 
 __all__ = [
     "CodeChunk",

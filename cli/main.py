@@ -16,7 +16,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from brain.model import ModelLoadError, generate_response
-from code.indexer import build_code_index
+from codebase.indexer import build_code_index
 from pdf.indexer import build_pdf_index
 from rag.retriever import build_index
 

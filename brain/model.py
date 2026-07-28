@@ -8,7 +8,7 @@ from typing import Any
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizerBase
 
-from code.retriever import search_code
+from codebase.retriever import search_code
 from core.config import load_settings
 from memory.retriever import search_memories
 from memory.store import save_memory

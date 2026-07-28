@@ -12,7 +12,7 @@ flowchart TD
     Notes[rag/]
     Memory[memory/]
     PDF[pdf/]
-    Code[code/]
+    Code[codebase/]
     Chroma[(storage/chroma)]
     Config[core/config.py]
 
@@ -42,7 +42,7 @@ flowchart TD
 | `rag/` | Personal notes loading, embedding, indexing, and search |
 | `memory/` | Memory detection, storage, and retrieval |
 | `pdf/` | PDF loading, chunking, indexing, and search |
-| `code/` | Source code loading, chunking, indexing, and search |
+| `codebase/` | Source code loading, chunking, indexing, and search |
 | `config/` | Runtime settings in `settings.txt` |
 | `data/` | Notes and PDF input files |
 | `scripts/` | Automated smoke and integration tests |
@@ -91,10 +91,10 @@ During chat generation, `brain/model.py`:
 
 ## Code Flow
 
-1. `code/loader.py` scans a project directory recursively.
-2. `code/chunker.py` splits files by class, function, method, or fallback size.
-3. `code/indexer.py` stores chunks in `zoe_code`.
-4. `code/retriever.py` returns relevant code during chat or tests.
+1. `codebase/loader.py` scans a project directory recursively.
+2. `codebase/chunker.py` splits files by class, function, method, or fallback size.
+3. `codebase/indexer.py` stores chunks in `zoe_code`.
+4. `codebase/retriever.py` returns relevant code during chat or tests.
 
 ## CLI Commands
 
