@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import TypedDict
 
 from core.config import ROOT, load_settings
+
+logger = logging.getLogger(__name__)
 
 PDF_SUFFIX = ".pdf"
 
@@ -50,7 +53,8 @@ def _extract_text(pdf_path: Path) -> str | None:
 
     try:
         reader = PdfReader(str(pdf_path))
-    except Exception:
+    except Exception as exc:
+        logger.warning("Could not open PDF '%s': %s", pdf_path, exc)
         return None
 
     if reader.is_encrypted:
@@ -61,7 +65,8 @@ def _extract_text(pdf_path: Path) -> str | None:
     for page in reader.pages:
         try:
             page_text = page.extract_text()
-        except Exception:
+        except Exception as exc:
+            logger.debug("Could not extract text from page in '%s': %s", pdf_path, exc)
             continue
 
         if page_text:

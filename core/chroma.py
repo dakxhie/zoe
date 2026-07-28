@@ -94,5 +94,6 @@ def collection_count(name: str) -> int:
     """Return the number of documents in a named collection."""
     try:
         return get_collection(name).count()
-    except ChromaError:
+    except ChromaError as exc:
+        logger.debug("Could not count collection '%s': %s", name, exc)
         return 0

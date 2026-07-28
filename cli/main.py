@@ -5,23 +5,39 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 import typer
 
 from core.logging_config import configure_logging
 
 configure_logging()
 
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
-from brain.model import ModelLoadError, generate_response
+from brain.model import ModelLoadError, generate_image_response, generate_response
 from codebase.indexer import build_code_index
 from core.diagnostics import print_startup_diagnostics
+from core.doctor import print_doctor_report, run_doctor
 from pdf.indexer import build_pdf_index
 from rag.retriever import build_index
+from vision.pipeline import analyze_image
 
-app = typer.Typer()
+_CLI_EPILOG = """
+Examples:
+  python cli/main.py chat
+  python cli/main.py ingest
+  python cli/main.py code .
+  python cli/main.py image photo.jpg
+  python cli/main.py image screenshot.png --prompt "Explain the error."
+"""
+
+app = typer.Typer(
+    name="zoe",
+    help="Zoe AI — local-first personal assistant with notes, memory, PDF, code, web, and vision.",
+    epilog=_CLI_EPILOG,
+    no_args_is_help=True,
+)
 
 _EXIT_COMMANDS = frozenset({"exit", "quit"})
 
@@ -79,6 +95,46 @@ def chat() -> None:
     _run_chat_loop()
 
 
+@app.command("image")
+def image_cmd(
+    image_path: str = typer.Argument(..., help="Path to the image file."),
+    prompt: str = typer.Option("", "--prompt", help="Optional question about the image."),
+) -> None:
+    """Analyze an image directly or answer a question about it."""
+    result = analyze_image(image_path, prompt=prompt)
+    metadata = result.get("metadata", {})
+
+    if not isinstance(metadata, dict) or metadata.get("width", 0) == 0:
+        print(f"Sorry, I could not load the image: {image_path}")
+        raise typer.Exit(code=1)
+
+    if not prompt.strip():
+        print("Caption")
+        print(result.get("caption") or "(empty)")
+        print()
+        print("OCR")
+        print(result.get("ocr") or "(empty)")
+        print()
+        print("Metadata")
+        for key, value in metadata.items():
+            print(f"{key}: {value}")
+        return
+
+    try:
+        reply = generate_image_response(image_path, prompt)
+    except ModelLoadError as exc:
+        print(f"Zoe: Sorry, I could not load the model. {exc}")
+        raise typer.Exit(code=1) from exc
+
+    print(f"Zoe: {reply}")
+
+
+@app.command()
+def doctor() -> None:
+    """Run a full system health check and print a diagnostic report."""
+    print_doctor_report(run_doctor())
+
+
 @app.command()
 def train() -> None:
     """Placeholder for future fine-tuning support."""
@@ -86,8 +142,10 @@ def train() -> None:
 
 
 @app.command()
-def code(project_path: str) -> None:
-    """Index a project's source code."""
+def code(
+    project_path: str = typer.Argument(..., help="Root directory of the project to index."),
+) -> None:
+    """Index a project's source code for semantic search."""
     print("Scanning project...")
     indexed_files, indexed_chunks = build_code_index(project_path)
     print(f"Indexed {indexed_files} files")
@@ -97,7 +155,7 @@ def code(project_path: str) -> None:
 
 @app.command()
 def ingest() -> None:
-    """Build the notes and PDF indexes."""
+    """Build the notes and PDF indexes from data/notes/ and data/pdfs/."""
     print("--------------------------------")
     print()
     print("Building Notes Index...")

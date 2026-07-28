@@ -1,4 +1,7 @@
-"""Smoke test for code indexing."""
+"""Smoke test for code indexing.
+
+Usage: python scripts/test_code_index.py
+"""
 
 from __future__ import annotations
 

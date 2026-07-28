@@ -9,8 +9,15 @@ from memory.history import add_message, get_history
 from memory.store import save_memory
 from tools.executor import execute_tool
 
-from brain.context import MEMORY_ACKNOWLEDGEMENT, _build_chat_messages, get_empty_index_response
+from brain.context import (
+    MEMORY_ACKNOWLEDGEMENT,
+    _build_chat_messages,
+    _retrieve_vision,
+    build_vision_context,
+    get_empty_index_response,
+)
 from brain.generation import generate_text, load_model
+from tools.router import extract_image_path, route_query
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +37,39 @@ def _try_save_memory(text: str) -> bool:
         return False
 
 
+def generate_image_response(
+    image_path: str,
+    prompt: str = "",
+    max_new_tokens: int = 256,
+) -> str:
+    """Generate an assistant reply about an image."""
+    vision_result = _retrieve_vision(image_path, prompt=prompt)
+    metadata = vision_result.get("metadata", {})
+    if not isinstance(metadata, dict) or metadata.get("width", 0) == 0:
+        return f"Sorry, I could not load the image: {image_path}"
+
+    vision_context = build_vision_context(vision_result)
+    if not vision_context.strip():
+        return f"Sorry, I could not extract any information from the image: {image_path}"
+
+    loaded_tokenizer, loaded_model = load_model()
+    history = get_history()
+    user_question = prompt.strip() or "Describe this image."
+    messages = _build_chat_messages(
+        user_question,
+        history,
+        vision_context=vision_context,
+    )
+    reply = generate_text(
+        loaded_tokenizer,
+        loaded_model,
+        messages,
+        max_new_tokens=max_new_tokens,
+    )
+    _record_exchange(user_question, reply)
+    return reply
+
+
 def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
     """Generate an assistant reply for the given user prompt."""
     # Memory storage injection: save personal messages before generation.
@@ -44,9 +84,18 @@ def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
         return tool_result
 
     is_analysis, analysis_context = run_project_analysis(prompt)
+    selected_route = route_query(prompt)
+
+    if selected_route == "vision":
+        image_path = extract_image_path(prompt)
+        if not image_path:
+            reply = "Please include a supported image file path in your request."
+            _record_exchange(prompt, reply)
+            return reply
+        return generate_image_response(image_path, prompt, max_new_tokens=max_new_tokens)
 
     if not is_analysis:
-        empty_index_response = get_empty_index_response(prompt)
+        empty_index_response = get_empty_index_response(prompt, selected_route)
         if empty_index_response is not None:
             _record_exchange(prompt, empty_index_response)
             return empty_index_response
@@ -58,6 +107,7 @@ def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
         prompt,
         history,
         analysis_context=analysis_context if is_analysis else "",
+        selected_route=selected_route,
     )
     reply = generate_text(
         loaded_tokenizer,

@@ -1,4 +1,7 @@
-"""Smoke test for PDF text extraction."""
+"""Smoke test for PDF text extraction.
+
+Usage: python scripts/test_pdf_loader.py
+"""
 
 from __future__ import annotations
 

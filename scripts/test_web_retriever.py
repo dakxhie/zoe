@@ -1,4 +1,7 @@
-"""Smoke test for web retrieval pipeline."""
+"""Smoke test for web retrieval pipeline.
+
+Usage: python scripts/test_web_retriever.py
+"""
 
 from __future__ import annotations
 

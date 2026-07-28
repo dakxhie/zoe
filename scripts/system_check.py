@@ -1,4 +1,7 @@
-"""Verify all Zoe AI subsystems are operational."""
+"""Verify all Zoe AI subsystems are operational.
+
+Usage: python scripts/system_check.py
+"""
 
 from __future__ import annotations
 
@@ -8,6 +11,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+from core.logging_config import configure_logging
+
+configure_logging()
 
 from agents.analyzer import run_project_analysis
 from agents.planner import build_plan, is_project_analysis_query

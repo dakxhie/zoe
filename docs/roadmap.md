@@ -8,73 +8,67 @@
 - CLI structure
 
 ### Sprint 2 — Personal Notes (RAG)
-- Notes loader
-- Embeddings
-- ChromaDB notes indexing
-- Notes retrieval in chat
+- Notes loader, embeddings, ChromaDB indexing, retrieval in chat
 
 ### Sprint 3 — Persistent Memory
-- Memory detection
-- Memory storage
-- Memory retrieval
-- Memory integration in chat
+- Memory detection, storage, retrieval, chat integration
 
 ### Sprint 4 — PDF Intelligence
-- PDF loading
-- PDF chunking
-- PDF indexing
-- PDF search
-- PDF integration in chat
-- `ingest` CLI command
+- PDF loading, chunking, indexing, search, `ingest` CLI
 
 ### Sprint 5 — Code Intelligence
-- Code loader
-- Smart code chunker
-- Code indexing
-- Code search
-- Code integration in chat
-- `code` CLI command
+- Code loader, chunker, indexer, search, `code` CLI
 
 ### Sprint 5.5 — Integration and Stability
-- Shared Chroma helpers
-- Shared indexing helpers
-- Context size limits
-- Improved deduplication
-- Logging
-- Full system test
-- Architecture and roadmap docs
+- Shared Chroma helpers, context limits, deduplication, logging, system tests
+
+### Sprint 6 — Agent Foundations
+- Tool routing layer, calculator, datetime, filesystem tools
+
+### Sprint 7 — Conversation History
+- In-memory FIFO conversation history in chat prompts
+
+### Sprint 8 — Web Research
+- DuckDuckGo search, webpage reading, disk cache, retrieval pipeline
+- Web routing, source-aware answers, empty-index fallback
+
+### Sprint 9 — Vision
+- Image loading (Pillow)
+- OCR (EasyOCR)
+- Image captioning (BLIP)
+- Unified vision pipeline
+- Vision routing and `image` CLI command
+
+### v1.0 — Production Stabilization
+- Brain module split (`pipeline`, `context`, `generation`)
+- Pytest suite and GitHub Actions CI
+- Startup diagnostics and system check script
+- Documentation refresh
 
 ## Next
 
-### Sprint 6 — Agent Foundations
-- Tool routing layer
-- Structured action planning
-- Safe command execution boundaries
-
-### Sprint 7 — Teaching Mode
+### Sprint 10 — Teaching Mode
 - Lesson plans from notes and PDFs
 - Quiz generation
 - Learning progress tracking
 
-### Sprint 8 — Voice and Multimodal
-- Speech input
-- Speech output
+### Sprint 11 — Voice and Multimodal
+- Speech input and output
 - Optional screen/context ingestion
 
-### Sprint 9 — Packaging and Deployment
-- Installable package metadata
-- Reproducible environment setup
+### Sprint 12 — Packaging and Deployment
+- Installable package metadata (`pyproject.toml`)
+- Reproducible environment presets
 - Local GPU and Colab presets
 
-### Sprint 10 — Quality and Observability
-- Automated CI
-- Regression tests for chat and retrieval
+### Sprint 13 — Quality and Observability
+- Expanded pytest coverage (web, vision, indexers)
 - Performance profiling for indexing and inference
+- Persistent conversation history (SQLite/JSON)
 
 ## Long-Term Goals
 
 - Multi-agent coordination
-- Web research tools
 - Fine-tuning and personalization
-- Long-term conversation history
-- Production-ready deployment workflow
+- Production deployment workflow
+- VS Code / IDE integration

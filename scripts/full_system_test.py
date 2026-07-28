@@ -1,4 +1,7 @@
-"""End-to-end smoke test for Zoe AI subsystems."""
+"""End-to-end smoke test for Zoe AI subsystems.
+
+Usage: python scripts/full_system_test.py
+"""
 
 from __future__ import annotations
 

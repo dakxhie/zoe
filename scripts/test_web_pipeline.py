@@ -1,4 +1,7 @@
-"""Smoke test for source-aware web answer pipeline."""
+"""Smoke test for source-aware web answer pipeline.
+
+Usage: python scripts/test_web_pipeline.py
+"""
 
 from __future__ import annotations
 

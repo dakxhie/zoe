@@ -1,4 +1,7 @@
-"""Smoke test for webpage cache hits and downloads."""
+"""Smoke test for webpage cache hits and downloads.
+
+Usage: python scripts/test_web_cache.py
+"""
 
 from __future__ import annotations
 

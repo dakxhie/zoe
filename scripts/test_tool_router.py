@@ -1,4 +1,7 @@
-"""Smoke test for the Zoe tool router."""
+"""Smoke test for the Zoe tool router.
+
+Usage: python scripts/test_tool_router.py
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,7 @@
-"""Smoke test for code file loading."""
+"""Smoke test for code file loading.
+
+Usage: python scripts/test_code_loader.py
+"""
 
 from __future__ import annotations
 

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import re
+
+from core.text_utils import matches_any, normalize_text
+
 MEMORY_PHRASES: tuple[str, ...] = (
     "my favorite",
     "my name",
@@ -64,51 +68,101 @@ FILESYSTEM_PHRASES: tuple[str, ...] = (
     "search text",
 )
 
-VALID_ROUTES: frozenset[str] = frozenset(
-    {"chat", "memory", "notes", "pdf", "code", "web", "filesystem"}
+VISION_PHRASES: tuple[str, ...] = (
+    "describe image",
+    "read image",
+    "what is in",
+    "explain screenshot",
+    "analyze image",
+    "ocr",
+    "photo",
+    "picture",
+    "graph",
+    "chart",
+    "receipt",
+    "invoice",
+    "scan",
+    "document image",
 )
 
-
-def _normalize(query: str) -> str:
-    """Normalize user input for case-insensitive matching."""
-    return " ".join(query.strip().lower().split())
-
-
-def _matches_any(text: str, phrases: tuple[str, ...]) -> bool:
-    """Return True when any phrase appears in the text."""
-    return any(phrase in text for phrase in phrases)
+IMAGE_EXTENSIONS: tuple[str, ...] = (".png", ".jpg", ".jpeg", ".webp", ".bmp")
 
 
 def _is_code_query(text: str) -> bool:
     """Return True when the query looks like a code search request."""
-    if _matches_any(text, CODE_PHRASES):
+    if _contains_image_path(text):
+        return False
+    if matches_any(text, CODE_PHRASES):
         return True
     return "()" in text
 
 
+def _contains_image_path(text: str) -> bool:
+    """Return True when the query references a supported image file."""
+    return extract_image_path(text) is not None
+
+
+def extract_image_path(query: str) -> str | None:
+    """Extract the first supported image file path from a query."""
+    normalized = query.replace("\\", "/")
+    tokens = re.findall(r"\S+", normalized)
+
+    for token in tokens:
+        cleaned = token.strip("\"'`,()[]{}")
+        lowered = cleaned.lower()
+        if any(lowered.endswith(extension) for extension in IMAGE_EXTENSIONS):
+            return cleaned
+
+    return None
+
+
+def _is_vision_query(text: str) -> bool:
+    """Return True when the query asks for image understanding."""
+    if matches_any(text, VISION_PHRASES):
+        return True
+    return _contains_image_path(text) and matches_any(
+        text,
+        (
+            "describe",
+            "explain",
+            "read",
+            "summarize",
+            "analyze",
+            "what",
+            "show",
+            "error",
+            "screenshot",
+            "image",
+        ),
+    )
+
+
 def route_query(query: str) -> str:
     """Classify a user query into one of Zoe's available tool routes."""
-    normalized = _normalize(query)
+    normalized = normalize_text(query)
 
     if not normalized:
         return "chat"
 
-    if _matches_any(normalized, MEMORY_PHRASES):
+    if matches_any(normalized, MEMORY_PHRASES):
         return "memory"
 
-    if _matches_any(normalized, NOTES_PHRASES):
+    if matches_any(normalized, NOTES_PHRASES):
         return "notes"
 
-    if _matches_any(normalized, PDF_PHRASES):
+    if _is_vision_query(normalized):
+        return "vision"
+
+    if matches_any(normalized, PDF_PHRASES):
         return "pdf"
 
-    if _matches_any(normalized, FILESYSTEM_PHRASES):
+    if matches_any(normalized, FILESYSTEM_PHRASES):
         return "filesystem"
 
     if _is_code_query(normalized):
         return "code"
 
-    if _matches_any(normalized, WEB_PHRASES):
+    if matches_any(normalized, WEB_PHRASES):
         return "web"
 
     return "chat"

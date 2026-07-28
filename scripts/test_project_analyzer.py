@@ -1,4 +1,7 @@
-"""Smoke test for project analysis planning and execution."""
+"""Smoke test for project analysis planning and execution.
+
+Usage: python scripts/test_project_analyzer.py
+"""
 
 from __future__ import annotations
 

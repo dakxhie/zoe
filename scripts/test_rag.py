@@ -1,4 +1,7 @@
-"""Smoke test for the Zoe RAG retrieval pipeline."""
+"""Smoke test for the Zoe RAG retrieval pipeline.
+
+Usage: python scripts/test_rag.py
+"""
 
 from __future__ import annotations
 

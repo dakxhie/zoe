@@ -1,4 +1,7 @@
-"""Smoke test for PDF text chunking."""
+"""Smoke test for PDF text chunking.
+
+Usage: python scripts/test_pdf_chunker.py
+"""
 
 from __future__ import annotations
 

@@ -7,7 +7,7 @@ from typing import Any
 
 from chromadb.api.models.Collection import Collection
 
-from core.chroma import ChromaError, existing_ids, get_collection
+from core.chroma import ChromaError, existing_ids, filter_new_ids, get_collection
 from rag.embedder import embed_texts
 from rag.loader import Document, DocumentLoadError, load_documents
 
@@ -32,7 +32,8 @@ def _filter_new_documents(
     known_ids: set[str],
 ) -> list[Document]:
     """Return only documents that are not already indexed."""
-    return [document for document in documents if document["id"] not in known_ids]
+    allowed_ids = set(filter_new_ids([document["id"] for document in documents], known_ids))
+    return [document for document in documents if document["id"] in allowed_ids]
 
 
 def _index_documents(collection: Collection, documents: list[Document]) -> int:

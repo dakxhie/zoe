@@ -2,50 +2,66 @@
 
 ## System Overview
 
-Zoe AI is a local-first personal assistant built around a Hugging Face chat model with multiple retrieval layers backed by ChromaDB.
+Zoe AI is a local-first personal assistant built around a Hugging Face chat model with tool-routed retrieval, web search, and vision analysis backed by ChromaDB.
 
 ```mermaid
 flowchart TD
     CLI[cli/main.py]
-    Brain[brain/model.py]
+    Pipeline[brain/pipeline.py]
+    Context[brain/context.py]
+    Generation[brain/generation.py]
+    Router[tools/router.py]
     LLM[Hugging Face Model]
+    Agents[agents/]
+    Tools[tools/]
+    Web[web/]
+    Vision[vision/]
     Notes[rag/]
     Memory[memory/]
     PDF[pdf/]
     Code[codebase/]
     Chroma[(storage/chroma)]
-    Config[core/config.py]
+    WebCache[(storage/web_cache)]
 
-    CLI --> Brain
-    Brain --> LLM
-    Brain --> Notes
-    Brain --> Memory
-    Brain --> PDF
-    Brain --> Code
+    CLI --> Pipeline
+    Pipeline --> Router
+    Pipeline --> Agents
+    Pipeline --> Tools
+    Pipeline --> Context
+    Pipeline --> Generation
+    Generation --> LLM
+    Context --> Notes
+    Context --> Memory
+    Context --> PDF
+    Context --> Code
+    Context --> Web
+    Context --> Vision
+    Web --> WebCache
     Notes --> Chroma
     Memory --> Chroma
     PDF --> Chroma
     Code --> Chroma
-    Notes --> Config
-    Memory --> Config
-    PDF --> Config
-    Code --> Config
 ```
 
 ## Folder Responsibilities
 
 | Folder | Responsibility |
 |--------|----------------|
-| `brain/` | Model loading and chat generation |
-| `cli/` | User commands: `chat`, `ingest`, `code`, `train` |
-| `core/` | Shared config, Chroma helpers, logging, indexing utilities |
+| `brain/` | Chat pipeline, context building, model loading, generation |
+| `cli/` | User commands: `chat`, `ingest`, `code`, `image`, `train` |
+| `core/` | Config, Chroma helpers, logging, indexing, diagnostics |
 | `rag/` | Personal notes loading, embedding, indexing, and search |
-| `memory/` | Memory detection, storage, and retrieval |
+| `memory/` | Memory detection, storage, retrieval, conversation history |
 | `pdf/` | PDF loading, chunking, indexing, and search |
 | `codebase/` | Source code loading, chunking, indexing, and search |
+| `web/` | Search, webpage reading, disk cache, retrieval pipeline |
+| `vision/` | Image loading, OCR, captioning, unified analysis |
+| `tools/` | Routing, calculator, datetime, filesystem execution |
+| `agents/` | Project analysis planner and executor |
 | `config/` | Runtime settings in `settings.txt` |
 | `data/` | Notes and PDF input files |
-| `scripts/` | Automated smoke and integration tests |
+| `scripts/` | Smoke and integration test scripts |
+| `tests/` | Pytest regression suite |
 
 ## ChromaDB Collections
 
@@ -58,43 +74,48 @@ flowchart TD
 
 All collections share the same database path via `core/chroma.py`.
 
-## Data Flow
+## Chat Pipeline
 
-1. Source files are loaded from disk.
-2. Text is chunked when needed.
-3. Embeddings are generated through `rag/embedder.py`.
-4. Vectors and metadata are stored in ChromaDB.
-5. Queries are embedded and matched semantically at runtime.
+`brain/pipeline.generate_response()` executes in order:
+
+1. Attempt memory save via `memory/store.py`
+2. Execute lightweight tools via `tools/executor.py`
+3. Run project analysis via `agents/analyzer.py` when matched
+4. Handle vision requests via `vision/pipeline.analyze_image()`
+5. Return empty-index guidance for notes, PDF, or code when applicable
+6. Build routed context via `brain/context.py`
+7. Generate LLM reply via `brain/generation.py`
 
 ## Retrieval Flow
 
-During chat generation, `brain/model.py`:
+The tool router selects **one** retrieval source per message:
 
-1. Attempts to save personal statements through `memory.store.save_memory()`.
-2. Retrieves notes, memories, PDF chunks, and code chunks in parallel.
-3. Merges only non-empty sections into one bounded system context.
-4. Sends the merged prompt to the local LLM.
+| Route | Source |
+|-------|--------|
+| `memory` | `memory/retriever.py` |
+| `notes` | `rag/retriever.py` |
+| `pdf` | `pdf/retriever.py` |
+| `code` | `codebase/retriever.py` |
+| `web` | `web/retriever.py` |
+| `vision` | `vision/pipeline.py` |
+| `chat` | no retrieval |
 
-## Memory Flow
+Context is capped in `brain/context.py` (`MAX_CONTEXT_CHARS = 6000`).
 
-1. `memory/detector.py` decides whether a message should be remembered.
-2. `memory/store.py` saves accepted messages to `zoe_memory`.
-3. Duplicate exact text is skipped.
-4. `memory/retriever.py` searches stored memories during chat.
+## Web Flow
 
-## PDF Flow
+1. `web/search.py` queries DuckDuckGo
+2. `web/reader.py` downloads and cleans pages
+3. `web/cache.py` stores page text on disk
+4. `web/retriever.py` assembles bounded context with source metadata
 
-1. `pdf/loader.py` extracts text from `data/pdfs/`.
-2. `pdf/chunker.py` splits text into overlapping chunks.
-3. `pdf/indexer.py` stores chunks in `zoe_documents`.
-4. `pdf/retriever.py` returns relevant chunks during chat or tests.
+## Vision Flow
 
-## Code Flow
-
-1. `codebase/loader.py` scans a project directory recursively.
-2. `codebase/chunker.py` splits files by class, function, method, or fallback size.
-3. `codebase/indexer.py` stores chunks in `zoe_code`.
-4. `codebase/retriever.py` returns relevant code during chat or tests.
+1. `vision/loader.py` loads and normalizes images
+2. `vision/caption.py` generates BLIP captions
+3. `vision/ocr.py` extracts text via EasyOCR
+4. `vision/pipeline.py` merges caption + OCR + metadata
+5. `brain/context.py` injects vision context into the system prompt
 
 ## CLI Commands
 
@@ -102,11 +123,25 @@ During chat generation, `brain/model.py`:
 |---------|---------|
 | `python cli/main.py chat` | Interactive conversation |
 | `python cli/main.py ingest` | Build notes and PDF indexes |
-| `python cli/main.py code PROJECT_PATH` | Index a project's source code |
+| `python cli/main.py code PROJECT_PATH` | Index project source code |
+| `python cli/main.py image IMAGE_PATH` | Analyze an image directly |
+| `python cli/main.py image IMAGE_PATH --prompt "..."` | Ask a question about an image |
+
+## Model Caching
+
+| Component | Cache location |
+|-----------|----------------|
+| LLM | `brain/generation.py` global singleton |
+| Embeddings | `rag/embedder.py` global singleton |
+| BLIP caption model | `vision/caption.py` global singleton |
+| EasyOCR reader | `vision/ocr.py` global singleton |
+| Chroma client | `core/chroma.py` global singleton |
+| Web pages | `storage/web_cache/` SHA256 files |
 
 ## Stability Notes
 
-- Shared Chroma helpers live in `core/chroma.py`.
-- Shared chunk deduplication lives in `core/indexing.py`.
-- Context size is capped in `brain/model.py` to reduce prompt overflow.
-- Retrieval failures are logged and do not stop chat generation.
+- Shared Chroma helpers live in `core/chroma.py`
+- Shared chunk deduplication lives in `core/indexing.py`
+- Retrieval failures are logged and do not stop chat generation
+- Startup diagnostics run at chat session start via `core/diagnostics.py`
+- CI runs pytest via `.github/workflows/tests.yml`

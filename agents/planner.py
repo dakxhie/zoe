@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from core.text_utils import matches_any, normalize_text
+
 ANALYSIS_PHRASES: tuple[str, ...] = (
     "analyze this project",
     "analyze the project",
@@ -24,15 +26,10 @@ PROJECT_ANALYSIS_PLAN: tuple[str, ...] = (
 )
 
 
-def _normalize(query: str) -> str:
-    """Normalize user input for phrase matching."""
-    return " ".join(query.strip().lower().split())
-
-
 def is_project_analysis_query(query: str) -> bool:
     """Return True when the user asks for project analysis or improvements."""
-    normalized = _normalize(query)
-    return any(phrase in normalized for phrase in ANALYSIS_PHRASES)
+    normalized = normalize_text(query)
+    return matches_any(normalized, ANALYSIS_PHRASES)
 
 
 def build_plan() -> list[str]:

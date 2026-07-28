@@ -7,6 +7,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, TypedDict
 
+from chromadb.api.models.Collection import Collection
+
 from core.chroma import ChromaError, existing_document_texts, get_collection
 from memory.detector import should_remember
 from rag.embedder import embed_texts
@@ -29,7 +31,7 @@ class MemoryStoreError(RuntimeError):
     """Raised when memory storage operations fail."""
 
 
-def _get_collection():
+def _get_collection() -> Collection:
     """Get or create the Zoe memory collection."""
     try:
         return get_collection(COLLECTION_NAME)

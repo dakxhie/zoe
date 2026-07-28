@@ -30,6 +30,7 @@ WEB_SOURCE_INSTRUCTION = (
 WEB_DISAGREEMENT_INSTRUCTION = (
     "When sources disagree, include all retrieved evidence and do not invent a consensus."
 )
+VISION_HEADING = "## Vision Context"
 
 MAX_CONTEXT_CHARS = 6000
 MAX_ITEM_CHARS = 1500
@@ -47,9 +48,12 @@ def _empty_index_message(tool: str) -> str | None:
     return None
 
 
-def get_empty_index_response(user_prompt: str) -> str | None:
+def get_empty_index_response(
+    user_prompt: str,
+    selected_route: str | None = None,
+) -> str | None:
     """Return a direct empty-index response when the routed index has no data."""
-    tool = route_query(user_prompt)
+    tool = selected_route or route_query(user_prompt)
     return _empty_index_message(tool)
 
 
@@ -87,6 +91,47 @@ def _retrieve_code(user_prompt: str, top_k: int = 5) -> list[dict[str, str]]:
     except Exception as exc:
         logger.warning("Code retrieval failed: %s", exc)
         return []
+
+
+def _retrieve_vision(image_path: str, prompt: str = "") -> dict[str, str | dict[str, str | int]]:
+    """Retrieve vision context for an image file."""
+    try:
+        from vision.pipeline import analyze_image
+
+        return analyze_image(image_path, prompt=prompt)
+    except Exception as exc:
+        logger.warning("Vision retrieval failed: %s", exc)
+        return {
+            "caption": "",
+            "ocr": "",
+            "combined_context": "",
+            "metadata": {
+                "filename": image_path,
+                "width": 0,
+                "height": 0,
+                "mode": "",
+                "format": "",
+            },
+        }
+
+
+def build_vision_context(result: dict[str, str | dict[str, str | int]]) -> str:
+    """Format vision analysis output for prompt injection."""
+    metadata = result.get("metadata", {})
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    metadata_lines = [
+        f"filename: {metadata.get('filename', '')}",
+        f"width: {metadata.get('width', 0)}",
+        f"height: {metadata.get('height', 0)}",
+        f"mode: {metadata.get('mode', '')}",
+        f"format: {metadata.get('format', '')}",
+    ]
+    combined = str(result.get("combined_context", "")).strip()
+    body = combined if combined else "Image Description:\n\n\n\nExtracted Text:\n\n"
+
+    return f"{body}\n\nMetadata:\n" + "\n".join(metadata_lines)
 
 
 def _retrieve_web(user_prompt: str, max_pages: int = 3) -> tuple[str, dict[str, int]]:
@@ -232,19 +277,20 @@ def _heading_for_tool(tool: str) -> str | None:
         "pdf": PDF_HEADING,
         "code": CODE_HEADING,
         "web": WEB_HEADING,
+        "vision": VISION_HEADING,
     }
     return headings.get(tool)
 
 
-def _build_merged_context(user_prompt: str) -> str:
+def _build_merged_context(
+    user_prompt: str,
+    selected_route: str | None = None,
+) -> str:
     """Build context from the single retrieval source selected by the tool router."""
-    tool = route_query(user_prompt)
+    tool = selected_route or route_query(user_prompt)
     logger.debug("Routed query to tool: %s", tool)
 
-    if tool == "chat":
-        return ""
-
-    if tool == "web":
+    if tool in {"chat", "web", "vision"}:
         return ""
 
     empty_message = _empty_index_message(tool)
@@ -285,6 +331,18 @@ def _build_web_system_content(context: str) -> str:
     )
 
 
+def _build_vision_system_content(context: str) -> str:
+    """Build the system prompt for answers grounded in vision context."""
+    return (
+        "You are Zoe.\n"
+        "Answer using the provided vision context about the user's image.\n"
+        "Prefer the image description and extracted text when answering.\n"
+        "If the answer is not contained in the vision context, "
+        "state that the information was not found.\n\n"
+        f"Context:\n{VISION_HEADING}\n\n{context}"
+    )
+
+
 def _build_system_content(context: str) -> str:
     """Build the system prompt containing Zoe instructions and retrieved context."""
     base = (
@@ -303,13 +361,18 @@ def _build_chat_messages(
     user_question: str,
     history: list[dict[str, str]],
     analysis_context: str = "",
+    vision_context: str = "",
+    selected_route: str | None = None,
 ) -> list[dict[str, str]]:
     """Build chat messages with system context, history, and the current user turn."""
     if analysis_context:
         context = _truncate_text(analysis_context, MAX_CONTEXT_CHARS)
         system_content = _build_analysis_system_content(context)
+    elif vision_context:
+        context = _truncate_at_paragraph_boundary(vision_context, MAX_CONTEXT_CHARS)
+        system_content = _build_vision_system_content(context)
     else:
-        tool = route_query(user_question)
+        tool = selected_route or route_query(user_question)
         if tool == "web":
             web_context, stats = _prepare_web_context(user_question)
             if web_context:
@@ -326,7 +389,7 @@ def _build_chat_messages(
                 )
                 system_content = _build_system_content("")
         else:
-            context = _build_merged_context(user_question)
+            context = _build_merged_context(user_question, selected_route=tool)
             system_content = _build_system_content(context)
 
     messages: list[dict[str, str]] = [

@@ -1,4 +1,7 @@
-# Zoe AI — Project Audit
+# Zoe AI — Project Audit (Historical)
+
+> **Note:** This document reflects the Sprint 1.2 audit from 2026-07-24.  
+> For current project status, see `PROJECT_STATUS.md` and `docs/ARCHITECTURE.md`.
 
 **Date:** 2026-07-24  
 **Scope:** Repository hygiene and Sprint 1.2 readiness (no new features)
@@ -72,7 +75,7 @@ Settings keys `MEMORY_DB`, `PDF_FOLDER`, and `NOTES_FOLDER` plus deps `chromadb`
 | 5 | **Settings paths not anchored to ROOT** | `config/settings.txt` — relative paths (`storage/chroma`, `data/pdfs`) will break if cwd changes |
 | 6 | **Referenced directories missing** | `storage/chroma/`, `data/pdfs/` — listed in settings but did not exist in repo |
 | 7 | **No packaging metadata** | No `pyproject.toml` — no installable entry point or version pinning |
-| 8 | **Unused requirements** | `python-dotenv`, `requests`, `tqdm`, `rich` — not referenced in code (some are Typer/transitive deps) |
+| 8 | **Unused requirements** | ~~`python-dotenv`, `tqdm`, `rich`~~ removed in RC2; `requests` used by `web/reader.py` |
 
 ### Minor / organizational
 

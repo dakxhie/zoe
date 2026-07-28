@@ -1,4 +1,7 @@
-"""Smoke test for webpage reading and text extraction."""
+"""Smoke test for webpage reading and text extraction.
+
+Usage: python scripts/test_web_reader.py
+"""
 
 from __future__ import annotations
 

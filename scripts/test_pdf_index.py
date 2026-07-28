@@ -1,4 +1,7 @@
-"""Smoke test for PDF indexing."""
+"""Smoke test for PDF indexing.
+
+Usage: python scripts/test_pdf_index.py
+"""
 
 from __future__ import annotations
 

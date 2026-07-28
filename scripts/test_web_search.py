@@ -1,4 +1,7 @@
-"""Smoke test for DuckDuckGo web search."""
+"""Smoke test for DuckDuckGo web search.
+
+Usage: python scripts/test_web_search.py
+"""
 
 from __future__ import annotations
 

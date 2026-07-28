@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
+from chromadb.api.models.Collection import Collection
+
 from core.chroma import ChromaError, get_collection
 from rag.embedder import embed_texts
 
@@ -23,7 +25,7 @@ class CodeRetrieverError(RuntimeError):
     """Raised when code search fails."""
 
 
-def _get_collection():
+def _get_collection() -> Collection:
     """Get or create the Zoe code collection."""
     try:
         return get_collection(COLLECTION_NAME)

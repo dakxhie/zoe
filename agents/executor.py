@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+
 from codebase.retriever import search_code
 from tools.filesystem import FilesystemError, read_file
+
+logger = logging.getLogger(__name__)
 
 IMPORTANT_FILES: tuple[str, ...] = (
     "README.md",
@@ -33,7 +37,8 @@ def _format_code_results(query: str) -> str:
     for term in searches:
         try:
             results = search_code(term, top_k=MAX_CODE_RESULTS)
-        except Exception:
+        except Exception as exc:
+            logger.warning("Project analysis code search failed for '%s': %s", term, exc)
             continue
 
         for result in results:

@@ -1,4 +1,7 @@
-"""Smoke test for conversation memory retrieval."""
+"""Smoke test for conversation memory retrieval.
+
+Usage: python scripts/test_memory_retriever.py
+"""
 
 from __future__ import annotations
 

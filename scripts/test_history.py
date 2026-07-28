@@ -1,4 +1,7 @@
-"""Smoke test for in-memory conversation history."""
+"""Smoke test for in-memory conversation history.
+
+Usage: python scripts/test_history.py
+"""
 
 from __future__ import annotations
 

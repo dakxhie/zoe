@@ -1,4 +1,7 @@
-"""Smoke test for tool execution."""
+"""Smoke test for tool execution.
+
+Usage: python scripts/test_tools.py
+"""
 
 from __future__ import annotations
 

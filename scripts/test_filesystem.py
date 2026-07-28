@@ -1,4 +1,7 @@
-"""Smoke test for filesystem tools."""
+"""Smoke test for filesystem tools.
+
+Usage: python scripts/test_filesystem.py
+"""
 
 from __future__ import annotations
 

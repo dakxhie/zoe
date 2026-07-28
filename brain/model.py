@@ -24,7 +24,7 @@ from brain.context import (
     _truncate_text,
 )
 from brain.generation import ModelLoadError, get_model_load_count, is_model_loaded, load_model, model, tokenizer
-from brain.pipeline import generate_response
+from brain.pipeline import generate_image_response, generate_response
 
 __all__ = [
     "CODE_HEADING",
@@ -47,6 +47,7 @@ __all__ = [
     "_retrieve_memories",
     "_retrieve_notes",
     "_truncate_text",
+    "generate_image_response",
     "generate_response",
     "get_model_load_count",
     "is_model_loaded",

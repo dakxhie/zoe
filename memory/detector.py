@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from core.text_utils import matches_any, normalize_text
+
 # Phrases that suggest personal information worth remembering.
 # More specific phrases are checked before broader ones like "i am".
 MEMORY_PHRASES: tuple[str, ...] = (
@@ -78,14 +80,9 @@ JOKE_PHRASES: tuple[str, ...] = (
 )
 
 
-def _normalize(text: str) -> str:
-    """Normalize user text for simple keyword matching."""
-    return " ".join(text.strip().lower().split())
-
-
 def _contains_phrase(text: str, phrases: tuple[str, ...]) -> bool:
     """Return True when any phrase appears in the text."""
-    return any(phrase in text for phrase in phrases)
+    return matches_any(text, phrases)
 
 
 def _is_question(text: str) -> bool:
@@ -135,7 +132,7 @@ def _has_memory_signal(text: str) -> bool:
 
 def should_remember(text: str) -> bool:
     """Return True when a message looks like personal information to remember."""
-    normalized = _normalize(text)
+    normalized = normalize_text(text)
 
     if not normalized:
         return False

@@ -1,4 +1,7 @@
-"""Smoke test for the Zoe memory detector."""
+"""Smoke test for the Zoe memory detector.
+
+Usage: python scripts/test_memory_detector.py
+"""
 
 from __future__ import annotations
 

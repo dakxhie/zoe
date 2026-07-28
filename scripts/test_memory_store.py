@@ -1,4 +1,7 @@
-"""Smoke test for persistent Zoe memory storage."""
+"""Smoke test for persistent Zoe memory storage.
+
+Usage: python scripts/test_memory_store.py
+"""
 
 from __future__ import annotations
 
