@@ -71,12 +71,16 @@ def _empty_metadata(image_path: str) -> dict[str, str | int]:
 
 def _build_combined_context(caption: str, ocr: str) -> str:
     """Merge caption and OCR output into one context string."""
-    sections: list[str] = []
+    caption_text = caption.strip()
+    ocr_text = ocr.strip()
 
-    sections.append(f"Image Description:\n\n{caption.strip() if caption else ''}")
-    sections.append(f"Extracted Text:\n\n{ocr.strip() if ocr else ''}")
+    if not caption_text and not ocr_text:
+        return ""
 
-    return "\n\n".join(sections).strip()
+    return (
+        f"Image Description:\n\n{caption_text}\n\n"
+        f"Extracted Text:\n\n{ocr_text}"
+    ).strip()
 
 
 def _run_caption(image: Image.Image) -> str:

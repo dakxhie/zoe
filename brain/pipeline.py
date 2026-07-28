@@ -12,6 +12,7 @@ from tools.executor import execute_tool
 from brain.context import (
     MEMORY_ACKNOWLEDGEMENT,
     _build_chat_messages,
+    _log_turn_debug,
     _retrieve_vision,
     build_vision_context,
     get_empty_index_response,
@@ -59,6 +60,18 @@ def generate_image_response(
         user_question,
         history,
         vision_context=vision_context,
+        selected_route="vision",
+    )
+    _log_turn_debug(
+        route="vision",
+        retriever="vision",
+        chunks=1,
+        context_chars=len(vision_context),
+        analysis_enabled=False,
+        vision=True,
+        web=False,
+        memory_matches=0,
+        prompt_chars=len(messages[0]["content"]),
     )
     reply = generate_text(
         loaded_tokenizer,
@@ -72,7 +85,6 @@ def generate_image_response(
 
 def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
     """Generate an assistant reply for the given user prompt."""
-    # Memory storage injection: save personal messages before generation.
     if _try_save_memory(prompt):
         reply = MEMORY_ACKNOWLEDGEMENT
         _record_exchange(prompt, reply)
@@ -94,6 +106,9 @@ def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
             return reply
         return generate_image_response(image_path, prompt, max_new_tokens=max_new_tokens)
 
+    if is_analysis and not analysis_context.strip():
+        logger.warning("Analysis enabled but context is empty; continuing without analysis injection")
+
     if not is_analysis:
         empty_index_response = get_empty_index_response(prompt, selected_route)
         if empty_index_response is not None:
@@ -103,12 +118,21 @@ def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
     loaded_tokenizer, loaded_model = load_model()
 
     history = get_history()
+    effective_analysis_context = analysis_context if is_analysis else ""
     messages = _build_chat_messages(
         prompt,
         history,
-        analysis_context=analysis_context if is_analysis else "",
+        analysis_context=effective_analysis_context,
         selected_route=selected_route,
     )
+
+    system_content = messages[0]["content"]
+    logger.info("Prompt chars: %s", len(system_content))
+    if is_analysis:
+        logger.info("Analysis enabled: yes")
+        if "Project Analysis" not in system_content:
+            logger.warning("Analysis context was not injected into the system prompt")
+
     reply = generate_text(
         loaded_tokenizer,
         loaded_model,

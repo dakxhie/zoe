@@ -76,8 +76,7 @@ def execute_project_analysis(query: str) -> str:
     """Execute the project analysis plan and return gathered context."""
     code_section = _format_code_results(query)
     files_section = _format_file_reads()
-
-    return (
+    gathered = (
         "========================\n"
         "Project Analysis\n"
         "========================\n\n"
@@ -89,3 +88,5 @@ def execute_project_analysis(query: str) -> str:
         "Use the project analysis context above to summarize the architecture "
         "and recommend concrete improvements. Do not ask the user for more files or code."
     )
+    logger.info("Executor finished gathering %s characters of analysis context", len(gathered))
+    return gathered

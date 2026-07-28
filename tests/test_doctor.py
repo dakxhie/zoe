@@ -4,16 +4,19 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from core.cli_commands import discover_cli_commands
 from core.doctor import (
     CheckResult,
     CheckStatus,
     CollectionInfo,
     DoctorReport,
+    check_cli,
     check_configuration,
     check_python,
     print_doctor_report,
     run_doctor,
 )
+from core.package_check import check_package
 
 
 def test_check_python_passes_on_supported_version() -> None:
@@ -32,6 +35,36 @@ def test_check_configuration_reports_missing_keys() -> None:
 
     assert result.status == CheckStatus.FAIL
     assert any("Missing keys" in detail for detail in result.details)
+
+
+def test_discover_cli_commands_from_source() -> None:
+    """Discover CLI commands without importing cli.main."""
+    commands = discover_cli_commands()
+
+    assert "chat" in commands
+    assert "doctor" in commands
+    assert "ingest" in commands
+
+
+def test_check_cli_passes_with_expected_commands() -> None:
+    """Verify CLI commands using source discovery."""
+    result = check_cli()
+
+    assert result.status == CheckStatus.PASS
+    assert "chat" in result.details[0]
+    assert "doctor" in result.details[0]
+
+
+def test_check_package_uses_distribution_name_for_pillow() -> None:
+    """Verify Pillow via its import module."""
+    with patch("core.package_check.version", return_value="10.0.0"), patch(
+        "core.package_check.importlib.import_module"
+    ) as import_module:
+        ok, message = check_package("Pillow")
+
+    assert ok is True
+    import_module.assert_called_once_with("PIL")
+    assert "Pillow 10.0.0" in message
 
 
 def test_run_doctor_never_raises_and_returns_report() -> None:

@@ -36,6 +36,33 @@ MAX_CONTEXT_CHARS = 6000
 MAX_ITEM_CHARS = 1500
 
 
+def _log_turn_debug(
+    *,
+    route: str,
+    retriever: str,
+    chunks: int,
+    context_chars: int,
+    analysis_enabled: bool,
+    vision: bool,
+    web: bool,
+    memory_matches: int,
+    prompt_chars: int,
+) -> None:
+    """Log retrieval details for one chat turn at DEBUG level."""
+    if not logger.isEnabledFor(logging.DEBUG):
+        return
+
+    logger.debug("Route selected: %s", route)
+    logger.debug("Retriever used: %s", retriever)
+    logger.debug("Chunks returned: %s", chunks)
+    logger.debug("Context characters: %s", context_chars)
+    logger.debug("Analysis enabled: %s", "yes" if analysis_enabled else "no")
+    logger.debug("Vision enabled: %s", "yes" if vision else "no")
+    logger.debug("Web enabled: %s", "yes" if web else "no")
+    logger.debug("Memory matches: %s", memory_matches)
+    logger.debug("Prompt characters: %s", prompt_chars)
+
+
 def _empty_index_message(tool: str) -> str | None:
     """Return a user-facing message when the routed index is empty."""
     collection_name = TOOL_COLLECTIONS.get(tool)
@@ -121,6 +148,19 @@ def build_vision_context(result: dict[str, str | dict[str, str | int]]) -> str:
     if not isinstance(metadata, dict):
         metadata = {}
 
+    caption = str(result.get("caption", "")).strip()
+    ocr = str(result.get("ocr", "")).strip()
+    combined = str(result.get("combined_context", "")).strip()
+
+    if not combined and not caption and not ocr:
+        return ""
+
+    if not combined:
+        combined = (
+            f"Image Description:\n\n{caption}\n\n"
+            f"Extracted Text:\n\n{ocr}"
+        ).strip()
+
     metadata_lines = [
         f"filename: {metadata.get('filename', '')}",
         f"width: {metadata.get('width', 0)}",
@@ -128,10 +168,8 @@ def build_vision_context(result: dict[str, str | dict[str, str | int]]) -> str:
         f"mode: {metadata.get('mode', '')}",
         f"format: {metadata.get('format', '')}",
     ]
-    combined = str(result.get("combined_context", "")).strip()
-    body = combined if combined else "Image Description:\n\n\n\nExtracted Text:\n\n"
 
-    return f"{body}\n\nMetadata:\n" + "\n".join(metadata_lines)
+    return f"{combined}\n\nMetadata:\n" + "\n".join(metadata_lines)
 
 
 def _retrieve_web(user_prompt: str, max_pages: int = 3) -> tuple[str, dict[str, int]]:
@@ -166,12 +204,17 @@ def _extract_web_sources(web_content: str) -> list[tuple[str, str]]:
 
 
 def build_web_sources_footer(sources: list[tuple[str, str]]) -> str:
-    """Build a source footer for web prompt context."""
+    """Build a deduplicated source footer for web prompt context."""
     if not sources:
         return ""
 
     lines = ["Sources:"]
-    lines.extend(f"• {title} — {url}" for title, url in sources)
+    seen_urls: set[str] = set()
+    for title, url in sources:
+        if url in seen_urls:
+            continue
+        seen_urls.add(url)
+        lines.append(f"• {title} — {url}")
     return "\n".join(lines)
 
 
@@ -309,6 +352,16 @@ def _build_merged_context(
     return _truncate_text(merged, MAX_CONTEXT_CHARS)
 
 
+def _count_retrieved_chunks(user_prompt: str, selected_route: str | None = None) -> int:
+    """Return the number of retrieved chunks for debug logging."""
+    tool = selected_route or route_query(user_prompt)
+    if tool in {"chat", "web", "vision"}:
+        return 0
+    if _empty_index_message(tool) is not None:
+        return 0
+    return len(_retrieve_for_tool(tool, user_prompt))
+
+
 def _build_analysis_system_content(context: str) -> str:
     """Build the system prompt for project analysis using gathered context."""
     return (
@@ -365,36 +418,66 @@ def _build_chat_messages(
     selected_route: str | None = None,
 ) -> list[dict[str, str]]:
     """Build chat messages with system context, history, and the current user turn."""
-    if analysis_context:
+    tool = selected_route or route_query(user_question)
+    chunks = 0
+    context_chars = 0
+    memory_matches = 0
+    web_enabled = False
+    vision_enabled = bool(vision_context.strip())
+    analysis_enabled = bool(analysis_context.strip())
+
+    if analysis_enabled:
         context = _truncate_text(analysis_context, MAX_CONTEXT_CHARS)
         system_content = _build_analysis_system_content(context)
-    elif vision_context:
+        context_chars = len(context)
+        chunks = 1
+        logger.info("Injecting analysis context (%s chars)", context_chars)
+    elif vision_enabled:
         context = _truncate_at_paragraph_boundary(vision_context, MAX_CONTEXT_CHARS)
         system_content = _build_vision_system_content(context)
-    else:
-        tool = selected_route or route_query(user_question)
-        if tool == "web":
-            web_context, stats = _prepare_web_context(user_question)
-            if web_context:
-                truncated_context = _truncate_at_paragraph_boundary(
-                    web_context,
-                    MAX_CONTEXT_CHARS,
-                )
-                _log_web_retrieval(truncated_context, stats)
-                system_content = _build_web_system_content(truncated_context)
-            else:
-                logger.info(
-                    "Web route selected but retrieval returned empty; "
-                    "falling back to normal chat generation"
-                )
-                system_content = _build_system_content("")
+        context_chars = len(context)
+        chunks = 1
+    elif tool == "web":
+        web_context, stats = _prepare_web_context(user_question)
+        web_enabled = bool(web_context)
+        if web_context:
+            truncated_context = _truncate_at_paragraph_boundary(
+                web_context,
+                MAX_CONTEXT_CHARS,
+            )
+            _log_web_retrieval(truncated_context, stats)
+            system_content = _build_web_system_content(truncated_context)
+            context_chars = len(truncated_context)
+            chunks = stats.get("pages_retrieved", 0)
         else:
-            context = _build_merged_context(user_question, selected_route=tool)
-            system_content = _build_system_content(context)
+            logger.info(
+                "Web route selected but retrieval returned empty; "
+                "falling back to normal chat generation"
+            )
+            system_content = _build_system_content("")
+    else:
+        context = _build_merged_context(user_question, selected_route=tool)
+        context_chars = len(context)
+        chunks = _count_retrieved_chunks(user_question, selected_route=tool)
+        if tool == "memory":
+            memory_matches = chunks
+        system_content = _build_system_content(context)
 
     messages: list[dict[str, str]] = [
         {"role": "system", "content": system_content},
     ]
     messages.extend(history)
     messages.append({"role": "user", "content": user_question})
+
+    _log_turn_debug(
+        route=tool,
+        retriever=tool,
+        chunks=chunks,
+        context_chars=context_chars,
+        analysis_enabled=analysis_enabled,
+        vision=vision_enabled,
+        web=web_enabled,
+        memory_matches=memory_matches,
+        prompt_chars=len(system_content),
+    )
     return messages

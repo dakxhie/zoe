@@ -1,12 +1,12 @@
 # Zoe AI — Project Status
 
-**Version:** v1.0-rc2  
+**Version:** v2.0  
 **Last updated:** 2026-07-28  
 **Branch:** `main`
 
 ## Summary
 
-Zoe AI is a local-first personal assistant with tool-routed retrieval, web research, and vision analysis. Sprints 1–9 are complete. RC2 focused on repository polish: shared utilities, docstrings, type hints, CLI help, and dependency cleanup — without behavior changes.
+Zoe AI is a local-first personal assistant with tool-routed retrieval, web research, vision analysis, conversational memory inference, and system diagnostics. v2.0 completes the final integration pass: timezone datetime, reliable doctor checks, analysis prompt injection, lazy model loading, and expanded pytest coverage.
 
 ## Subsystem Status
 
@@ -21,20 +21,23 @@ Zoe AI is a local-first personal assistant with tool-routed retrieval, web resea
 | Vision | ✅ Complete | `vision/pipeline.py` |
 | Tools | ✅ Complete | `tools/router.py` |
 | Agents | ✅ Complete | `agents/analyzer.py` |
+| Doctor | ✅ Complete | `core/doctor.py` |
 | CLI | ✅ Complete | `cli/main.py` |
 | CI | ✅ Partial | `.github/workflows/tests.yml` |
 
-## RC2 Cleanup (2026-07-28)
+## v2 Integration (2026-07-28)
 
 | Area | Change |
 |------|--------|
-| Shared utilities | `core/text_utils.py` — `normalize_text()`, `matches_any()` |
-| Type hints | Chroma `Collection` return types on retriever helpers |
-| Package docs | `brain/`, `core/`, `tests/` `__init__.py` |
-| CLI help | Typer epilog with examples; improved argument descriptions |
-| Scripts | `Usage:` line in every `scripts/*.py` docstring |
-| Dependencies | Removed unused `python-dotenv`, `tqdm`, `rich` from `requirements.txt` |
-| Router | Removed duplicate normalize/match wrappers |
+| Datetime | Timezone-aware requests via `zoneinfo` |
+| Memory | Conversational inference from assistant follow-ups |
+| Analysis | Guaranteed context injection with debug logging |
+| Doctor | Reliable dependency, CLI, and Chroma checks |
+| Startup | Collection counts in diagnostics |
+| Model | Lazy LLM loading for non-chat commands |
+| Web | URL/snippet deduplication, 3-page cap |
+| Vision | Partial results when OCR or caption alone succeeds |
+| Tests | doctor, web, vision, analysis, datetime, lazy loading |
 
 ## Test Coverage
 
@@ -43,15 +46,16 @@ Zoe AI is a local-first personal assistant with tool-routed retrieval, web resea
 | Router / tools | ✅ | ✅ |
 | Brain / context | ✅ | ✅ |
 | Memory / RAG | ✅ | ✅ |
-| Web | ❌ | ✅ |
-| Vision | ❌ | ✅ |
+| Web | ✅ | ✅ |
+| Vision | ✅ | ✅ |
+| Doctor / diagnostics | ✅ | ✅ |
+| Analysis pipeline | ✅ | ✅ |
 | Indexers | ❌ | ✅ |
 
 ## Known Limitations
 
 - Conversation history is in-memory only (lost on restart)
 - `train` CLI command is a placeholder
-- Web and vision modules are not in pytest CI
 - Chroma deduplication scans full collections on index builds
 - `docs/personality.md` is not loaded at runtime
 
@@ -62,8 +66,7 @@ pip install -r requirements.txt
 python cli/main.py ingest
 python cli/main.py code .
 python cli/main.py chat
-python cli/main.py image photo.jpg
-python scripts/system_check.py
+python cli/main.py doctor
 pytest tests/ -v
 ```
 

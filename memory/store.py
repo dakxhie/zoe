@@ -11,6 +11,8 @@ from chromadb.api.models.Collection import Collection
 
 from core.chroma import ChromaError, existing_document_texts, get_collection
 from memory.detector import should_remember
+from memory.history import get_history
+from memory.inference import infer_memory
 from rag.embedder import embed_texts
 
 COLLECTION_NAME = "zoe_memory"
@@ -80,9 +82,30 @@ def _memory_exists(collection, text: str) -> bool:
     return normalized in existing_document_texts(collection)
 
 
+def _previous_assistant_message() -> str | None:
+    """Return the most recent assistant message from conversation history."""
+    for message in reversed(get_history()):
+        if message["role"] == "assistant":
+            return message["content"]
+    return None
+
+
+def _resolve_memory_text(text: str) -> str | None:
+    """Return explicit or inferred memory text worth saving."""
+    if should_remember(text):
+        return text.strip()
+
+    inferred = infer_memory(text, _previous_assistant_message())
+    if inferred:
+        return inferred.strip()
+
+    return None
+
+
 def save_memory(text: str) -> bool:
     """Save a conversation memory when it passes the detector rules."""
-    if not should_remember(text):
+    memory_text = _resolve_memory_text(text)
+    if not memory_text:
         return False
 
     try:
@@ -91,8 +114,8 @@ def save_memory(text: str) -> bool:
         logger.warning("Memory save skipped because ChromaDB is unavailable")
         return False
 
-    if _memory_exists(collection, text):
-        logger.debug("Skipped duplicate memory: %s", text[:80])
+    if _memory_exists(collection, memory_text):
+        logger.debug("Skipped duplicate memory: %s", memory_text[:80])
         return False
 
     memory_id = str(uuid.uuid4())
@@ -100,10 +123,10 @@ def save_memory(text: str) -> bool:
     metadata = _build_metadata(created_at)
 
     try:
-        embeddings = embed_texts([text])
+        embeddings = embed_texts([memory_text])
         collection.add(
             ids=[memory_id],
-            documents=[text],
+            documents=[memory_text],
             embeddings=embeddings,
             metadatas=[metadata],
         )

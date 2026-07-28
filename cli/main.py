@@ -11,23 +11,18 @@ if str(ROOT) not in sys.path:
 
 import typer
 
+from core.diagnostics import print_startup_diagnostics
+from core.doctor import print_doctor_report, run_doctor
 from core.logging_config import configure_logging
 
 configure_logging()
-
-from brain.model import ModelLoadError, generate_image_response, generate_response
-from codebase.indexer import build_code_index
-from core.diagnostics import print_startup_diagnostics
-from core.doctor import print_doctor_report, run_doctor
-from pdf.indexer import build_pdf_index
-from rag.retriever import build_index
-from vision.pipeline import analyze_image
 
 _CLI_EPILOG = """
 Examples:
   python cli/main.py chat
   python cli/main.py ingest
   python cli/main.py code .
+  python cli/main.py doctor
   python cli/main.py image photo.jpg
   python cli/main.py image screenshot.png --prompt "Explain the error."
 """
@@ -44,7 +39,7 @@ _EXIT_COMMANDS = frozenset({"exit", "quit"})
 
 def _print_welcome() -> None:
     """Show the chat session header."""
-    print("🤖 Zoe v1")
+    print("🤖 Zoe v2")
     print('Type "exit" to quit.\n')
 
 
@@ -64,6 +59,8 @@ def _should_exit(user_input: str) -> bool:
 
 def _run_chat_loop() -> None:
     """Run the interactive chat session until the user exits."""
+    from brain.model import ModelLoadError, generate_response
+
     _print_welcome()
     print_startup_diagnostics()
     print()
@@ -101,6 +98,9 @@ def image_cmd(
     prompt: str = typer.Option("", "--prompt", help="Optional question about the image."),
 ) -> None:
     """Analyze an image directly or answer a question about it."""
+    from brain.model import ModelLoadError, generate_image_response
+    from vision.pipeline import analyze_image
+
     result = analyze_image(image_path, prompt=prompt)
     metadata = result.get("metadata", {})
 
@@ -146,6 +146,8 @@ def code(
     project_path: str = typer.Argument(..., help="Root directory of the project to index."),
 ) -> None:
     """Index a project's source code for semantic search."""
+    from codebase.indexer import build_code_index
+
     print("Scanning project...")
     indexed_files, indexed_chunks = build_code_index(project_path)
     print(f"Indexed {indexed_files} files")
@@ -156,6 +158,9 @@ def code(
 @app.command()
 def ingest() -> None:
     """Build the notes and PDF indexes from data/notes/ and data/pdfs/."""
+    from pdf.indexer import build_pdf_index
+    from rag.retriever import build_index
+
     print("--------------------------------")
     print()
     print("Building Notes Index...")

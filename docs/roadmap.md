@@ -45,6 +45,15 @@
 - Startup diagnostics and system check script
 - Documentation refresh
 
+### v2.0 — Final Integration
+- Timezone-aware datetime tool
+- Conversational memory inference
+- Reliable system doctor (`python cli/main.py doctor`)
+- Guaranteed project analysis context injection
+- Lazy LLM loading for non-chat commands
+- Web deduplication and vision partial-result handling
+- Expanded pytest coverage
+
 ## Next
 
 ### Sprint 10 — Teaching Mode

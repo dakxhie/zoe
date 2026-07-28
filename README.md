@@ -2,7 +2,7 @@
 
 My personal AI assistant — a local-first LLM with notes, memory, PDF, code, web, and vision capabilities.
 
-Version: v1.0
+Version: v2.0
 
 ## Project Architecture
 
@@ -57,7 +57,7 @@ flowchart TD
 | Folder | Responsibility |
 |--------|----------------|
 | `brain/` | Model loading, context building, chat pipeline, and generation |
-| `cli/` | User commands: `chat`, `ingest`, `code`, `image`, `train` |
+| `cli/` | User commands: `chat`, `ingest`, `code`, `image`, `doctor`, `train` |
 | `core/` | Shared config, Chroma helpers, logging, indexing utilities |
 | `rag/` | Personal notes loading, embedding, indexing, and search |
 | `memory/` | Memory detection, storage, retrieval, and conversation history |
@@ -180,7 +180,7 @@ The tool router (`tools/router.py`) classifies queries into: `chat`, `memory`, `
 | Tool | Examples |
 |------|----------|
 | Calculator | `2+2`, `10*(5+2)` |
-| Datetime | `Current time`, `Today's date` |
+| Datetime | `Current time`, `Today's date`, `What time is it in India?`, `UTC time` |
 | Filesystem | `list files`, `read file README.md` |
 | Web | `latest news`, `current weather` |
 | Vision | `describe image.jpg`, `read receipt.png` |
@@ -200,6 +200,7 @@ pytest tests/ -v
 ### Script smoke tests
 
 ```bash
+python cli/main.py doctor
 python scripts/system_check.py
 python scripts/test_web_pipeline.py
 python scripts/test_vision_pipeline.py

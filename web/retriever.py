@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from web.cache import cache_page, get_cached_page, get_cached_retrieved_at
 from web.reader import read_webpage
@@ -11,6 +12,7 @@ from web.search import search_web
 logger = logging.getLogger(__name__)
 
 MAX_WEB_CONTEXT_CHARS = 12_000
+SNIPPET_DEDUP_CHARS = 200
 
 
 def _format_page(title: str, url: str, content: str, retrieved_at: str) -> str:
@@ -26,6 +28,12 @@ def _format_page(title: str, url: str, content: str, retrieved_at: str) -> str:
 def _header_length(title: str, url: str, retrieved_at: str) -> int:
     """Return the formatted block size without page content."""
     return len(_format_page(title, url, "", retrieved_at))
+
+
+def _normalize_snippet(text: str) -> str:
+    """Normalize page text for duplicate snippet detection."""
+    collapsed = re.sub(r"\s+", " ", text.strip().lower())
+    return collapsed[:SNIPPET_DEDUP_CHARS]
 
 
 def _fetch_page_text(url: str) -> tuple[str, str, bool] | None:
@@ -78,13 +86,17 @@ def retrieve_web_context_with_stats(
         return "", stats
 
     pages: list[tuple[str, str, str, str]] = []
-    seen_text: set[str] = set()
+    seen_urls: set[str] = set()
+    seen_snippets: set[str] = set()
 
     for result in results:
+        if len(pages) >= max_pages:
+            break
+
         url = result.get("url", "").strip()
         title = result.get("title", "").strip() or url
 
-        if not url:
+        if not url or url in seen_urls:
             continue
 
         fetched = _fetch_page_text(url)
@@ -92,15 +104,18 @@ def retrieve_web_context_with_stats(
             continue
 
         page_text, retrieved_at, cache_hit = fetched
+        snippet_key = _normalize_snippet(page_text)
+        if snippet_key in seen_snippets:
+            continue
+
+        seen_urls.add(url)
+        seen_snippets.add(snippet_key)
+
         if cache_hit:
             stats["cache_hits"] += 1
         else:
             stats["downloads"] += 1
 
-        if page_text in seen_text:
-            continue
-
-        seen_text.add(page_text)
         pages.append((title, url, page_text, retrieved_at))
 
     if not pages:

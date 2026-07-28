@@ -27,19 +27,6 @@ REQUIRED_SETTINGS_KEYS: tuple[str, ...] = (
     "NOTES_FOLDER",
 )
 
-DEPENDENCY_PACKAGES: tuple[tuple[str, str], ...] = (
-    ("torch", "torch"),
-    ("transformers", "transformers"),
-    ("sentence_transformers", "sentence-transformers"),
-    ("chromadb", "chromadb"),
-    ("typer", "typer"),
-    ("Pillow", "Pillow"),
-    ("easyocr", "easyocr"),
-    ("requests", "requests"),
-    ("beautifulsoup4", "bs4"),
-    ("duckduckgo_search", "duckduckgo-search"),
-)
-
 EXPECTED_FOLDERS: tuple[tuple[str, bool], ...] = (
     ("data", True),
     ("data/memory", False),
@@ -130,20 +117,15 @@ def check_python() -> CheckResult:
 
 def check_dependencies() -> CheckResult:
     """Verify important packages can be imported."""
-    details: list[str] = []
-    fixes: list[str] = []
-    failed = False
+    from core.package_check import check_required_packages
 
-    for display_name, import_name in DEPENDENCY_PACKAGES:
-        try:
-            importlib.import_module(import_name)
-            details.append(f"{display_name} ............... PASS")
-        except Exception as exc:
-            failed = True
-            details.append(f"{display_name} ............... FAIL ({exc})")
-            fixes.append(f"Install: pip install {display_name}")
-
-    status = CheckStatus.FAIL if failed else CheckStatus.PASS
+    ok, details = check_required_packages()
+    fixes = [
+        f"Install: pip install {detail.split()[0]}"
+        for detail in details
+        if "FAIL" in detail
+    ]
+    status = CheckStatus.PASS if ok else CheckStatus.FAIL
     return CheckResult("Dependencies", status, details=details, fixes=fixes)
 
 
@@ -242,15 +224,37 @@ def _count_unique_code_files(collection: Any) -> int:
 
 def check_chroma() -> tuple[CheckResult, list[CollectionInfo]]:
     """Initialize Chroma and list collection counts."""
-    from core.chroma import ChromaError, get_chroma_client, get_collection
+    from core.chroma import ChromaError, get_chroma_client, get_chroma_path, get_collection
 
     collections: list[CollectionInfo] = []
+
+    try:
+        chroma_path = get_chroma_path()
+    except Exception as exc:
+        return (
+            CheckResult(
+                name="Chroma",
+                status=CheckStatus.FAIL,
+                details=[f"Could not resolve Chroma path: {exc}"],
+            ),
+            collections,
+        )
 
     try:
         client = get_chroma_client()
         listed = client.list_collections()
         names = sorted({collection.name for collection in listed})
     except ChromaError as exc:
+        if chroma_path.exists():
+            return (
+                CheckResult(
+                    name="Chroma",
+                    status=CheckStatus.FAIL,
+                    details=[f"Database exists but cannot be opened: {exc}"],
+                    fixes=["Verify MEMORY_DB path in config/settings.txt is writable."],
+                ),
+                collections,
+            )
         return (
             CheckResult(
                 name="Chroma",
@@ -270,7 +274,10 @@ def check_chroma() -> tuple[CheckResult, list[CollectionInfo]]:
             collections,
         )
 
-    details = [f"Found {len(names)} collection(s)."]
+    if not names:
+        details = [f"Database accessible at {chroma_path}", "No collections indexed yet (empty database)."]
+    else:
+        details = [f"Database accessible at {chroma_path}", f"Found {len(names)} collection(s)."]
 
     for collection_name, unit in KNOWN_COLLECTIONS:
         try:
@@ -298,18 +305,22 @@ def check_chroma() -> tuple[CheckResult, list[CollectionInfo]]:
 
 def check_memory() -> CheckResult:
     """Verify the memory collection is accessible."""
-    from memory.retriever import search_memories
+    from core.chroma import collection_count
+    from core.index_status import COLLECTION_MEMORY
 
     try:
-        results = search_memories("doctor health check", top_k=1)
-        detail = f"Collection accessible ({len(results)} result(s) returned)."
-        return CheckResult("Memory", CheckStatus.PASS, details=[detail])
+        count = collection_count(COLLECTION_MEMORY)
+        return CheckResult(
+            name="Memory",
+            status=CheckStatus.PASS,
+            details=[f"Collection accessible ({count} document(s))."],
+        )
     except Exception as exc:
         return CheckResult(
             name="Memory",
             status=CheckStatus.FAIL,
             details=[str(exc)],
-            fixes=["Verify ChromaDB is available and memory/retriever.py imports succeed."],
+            fixes=["Verify ChromaDB is available and memory collection is accessible."],
         )
 
 
@@ -533,10 +544,10 @@ def check_tools() -> CheckResult:
 
 def check_cli() -> CheckResult:
     """Verify CLI commands are registered."""
-    try:
-        import cli.main as cli_module
+    from core.cli_commands import EXPECTED_COMMANDS, discover_cli_commands
 
-        commands = sorted(command.name for command in cli_module.app.registered_commands)
+    try:
+        commands = discover_cli_commands()
     except Exception as exc:
         return CheckResult(
             name="CLI",
@@ -548,7 +559,18 @@ def check_cli() -> CheckResult:
         return CheckResult(
             name="CLI",
             status=CheckStatus.FAIL,
-            details=["No CLI commands registered."],
+            details=["No CLI commands discovered in cli/main.py."],
+        )
+
+    missing = sorted(EXPECTED_COMMANDS - set(commands))
+    if missing:
+        return CheckResult(
+            name="CLI",
+            status=CheckStatus.FAIL,
+            details=[
+                f"Discovered: {', '.join(commands)}",
+                f"Missing expected commands: {', '.join(missing)}",
+            ],
         )
 
     return CheckResult(

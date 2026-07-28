@@ -13,20 +13,17 @@ from core.index_status import (
 
 
 def _format_index_status(name: str, count: int) -> str:
-    """Format an index status line for ready or empty collections."""
-    if count > 0:
-        return f"✓ {name} index ready ({count} item(s))"
-    return f"✓ {name} index empty"
+    """Format an index status line with collection counts."""
+    return f"✓ {name} ({count})"
 
 
-def _check_memory_database() -> str:
-    """Verify the memory database path and collection are accessible."""
+def _memory_count() -> int:
+    """Return the number of stored memories, or zero when unavailable."""
     try:
         get_chroma_path()
-        collection_count(COLLECTION_MEMORY)
-        return "✓ Memory database ready"
+        return collection_count(COLLECTION_MEMORY)
     except (ChromaError, OSError):
-        return "✓ Memory database unavailable"
+        return 0
 
 
 def _check_model_available() -> str:
@@ -42,27 +39,24 @@ def run_startup_diagnostics() -> list[str]:
     lines: list[str] = []
 
     try:
-        lines.append(_check_memory_database())
+        lines.append(_format_index_status("Memory", _memory_count()))
     except Exception:
-        lines.append("✓ Memory database unavailable")
+        lines.append("✓ Memory (0)")
 
     try:
-        notes_count = collection_count(COLLECTION_NOTES)
-        lines.append(_format_index_status("Notes", notes_count))
+        lines.append(_format_index_status("Notes", collection_count(COLLECTION_NOTES)))
     except Exception:
-        lines.append("✓ Notes index empty")
+        lines.append("✓ Notes (0)")
 
     try:
-        pdf_count = collection_count(COLLECTION_PDF)
-        lines.append(_format_index_status("PDF", pdf_count))
+        lines.append(_format_index_status("PDF", collection_count(COLLECTION_PDF)))
     except Exception:
-        lines.append("✓ PDF index empty")
+        lines.append("✓ PDF (0)")
 
     try:
-        code_count = collection_count(COLLECTION_CODE)
-        lines.append(_format_index_status("Code", code_count))
+        lines.append(_format_index_status("Code", collection_count(COLLECTION_CODE)))
     except Exception:
-        lines.append("✓ Code index empty")
+        lines.append("✓ Code (0)")
 
     try:
         lines.append(_check_model_available())

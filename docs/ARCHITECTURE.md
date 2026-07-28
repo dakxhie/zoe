@@ -48,8 +48,8 @@ flowchart TD
 | Folder | Responsibility |
 |--------|----------------|
 | `brain/` | Chat pipeline, context building, model loading, generation |
-| `cli/` | User commands: `chat`, `ingest`, `code`, `image`, `train` |
-| `core/` | Config, Chroma helpers, logging, indexing, diagnostics |
+| `cli/` | User commands: `chat`, `ingest`, `code`, `image`, `doctor`, `train` |
+| `core/` | Config, Chroma helpers, logging, diagnostics, doctor, package checks |
 | `rag/` | Personal notes loading, embedding, indexing, and search |
 | `memory/` | Memory detection, storage, retrieval, conversation history |
 | `pdf/` | PDF loading, chunking, indexing, and search |
