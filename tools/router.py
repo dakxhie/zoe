@@ -38,6 +38,22 @@ CODE_PHRASES: tuple[str, ...] = (
     "project source",
 )
 
+WEB_PHRASES: tuple[str, ...] = (
+    "latest",
+    "today",
+    "news",
+    "current",
+    "recent",
+    "who is currently",
+    "weather",
+    "stock price",
+    "exchange rate",
+    "version",
+    "release",
+    "documentation",
+    "official docs",
+)
+
 FILESYSTEM_PHRASES: tuple[str, ...] = (
     "list files",
     "show files",
@@ -49,7 +65,7 @@ FILESYSTEM_PHRASES: tuple[str, ...] = (
 )
 
 VALID_ROUTES: frozenset[str] = frozenset(
-    {"chat", "memory", "notes", "pdf", "code", "filesystem"}
+    {"chat", "memory", "notes", "pdf", "code", "web", "filesystem"}
 )
 
 
@@ -91,5 +107,8 @@ def route_query(query: str) -> str:
 
     if _is_code_query(normalized):
         return "code"
+
+    if _matches_any(normalized, WEB_PHRASES):
+        return "web"
 
     return "chat"
