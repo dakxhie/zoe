@@ -1,18 +1,21 @@
 # Core runtime
-typer
-rich
-python-dotenv
+typer>=0.12.0,<0.16.0
+rich>=13.7.0,<14.0.0
+python-dotenv>=1.0.0,<2.0.0
 
 # Model inference (Colab GPU + local CUDA)
-torch
-transformers
-huggingface_hub
+torch>=2.2.0,<3.0.0
+transformers>=4.40.0,<5.0.0
+huggingface_hub>=0.23.0,<1.0.0
 
-# Planned for Sprint 1.2+ (memory, RAG, PDF ingestion)
-sentence-transformers
-chromadb
-pypdf
+# Memory, RAG, PDF ingestion
+sentence-transformers>=2.7.0,<4.0.0
+chromadb>=0.5.0,<1.0.0
+pypdf>=4.0.0,<6.0.0
 
 # Utilities
-requests
-tqdm
+requests>=2.31.0,<3.0.0
+tqdm>=4.66.0,<5.0.0
+
+# Testing
+pytest>=8.0.0,<9.0.0
