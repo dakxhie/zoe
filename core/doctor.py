@@ -226,7 +226,7 @@ def _count_unique_code_files(collection: Any) -> int:
 
 def check_chroma() -> tuple[CheckResult, list[CollectionInfo]]:
     """Initialize Chroma and list collection counts."""
-    from core.chroma import ChromaError, get_chroma_client, get_chroma_path, get_collection
+    from core.chroma import ChromaError, get_chroma_path, get_collection, list_collection_names
 
     collections: list[CollectionInfo] = []
 
@@ -243,9 +243,7 @@ def check_chroma() -> tuple[CheckResult, list[CollectionInfo]]:
         )
 
     try:
-        client = get_chroma_client()
-        listed = client.list_collections()
-        names = sorted({collection.name for collection in listed})
+        names = list_collection_names()
     except ChromaError as exc:
         if chroma_path.exists():
             return (

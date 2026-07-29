@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 
@@ -65,6 +66,36 @@ def get_collection(name: str) -> Collection:
     collection = client.get_or_create_collection(name=name)
     logger.debug("Using ChromaDB collection '%s'", name)
     return collection
+
+
+def _collection_name_from_list_entry(item: Any) -> str:
+    """Normalize one entry from ``list_collections()`` to a collection name."""
+    if isinstance(item, str):
+        return item
+
+    name = getattr(item, "name", None)
+    if isinstance(name, str):
+        return name
+
+    raise ChromaError(f"Unexpected collection entry from list_collections(): {item!r}")
+
+
+def list_collection_names() -> list[str]:
+    """Return sorted unique collection names from the Chroma client.
+
+    ChromaDB 0.5 and earlier return Collection objects; 0.6+ returns name strings.
+    """
+    client = get_chroma_client()
+    try:
+        listed = client.list_collections()
+    except Exception as exc:
+        raise ChromaError(f"Could not list ChromaDB collections: {exc}") from exc
+
+    names: set[str] = set()
+    for item in listed:
+        names.add(_collection_name_from_list_entry(item))
+
+    return sorted(names)
 
 
 def existing_ids(collection: Collection) -> set[str]:
