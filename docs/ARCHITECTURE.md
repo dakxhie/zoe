@@ -51,7 +51,8 @@ flowchart TD
 | `cli/` | User commands: `chat`, `ingest`, `code`, `image`, `doctor`, `train` |
 | `core/` | Config, Chroma helpers, logging, diagnostics, doctor, package checks |
 | `rag/` | Personal notes loading, embedding, indexing, and search |
-| `memory/` | Memory detection, storage, retrieval, conversation history |
+| `memory/` | Memory detection, storage, retrieval, conversation bridge |
+| `conversation/` | Persistent dialogue storage, sessions, summarization, search |
 | `pdf/` | PDF loading, chunking, indexing, and search |
 | `codebase/` | Source code loading, chunking, indexing, and search |
 | `web/` | Search, webpage reading, disk cache, retrieval pipeline |
@@ -69,6 +70,7 @@ flowchart TD
 |------------|---------|
 | `zoe_notes` | Personal notes from `data/notes/` |
 | `zoe_memory` | Learned conversation memories |
+| `zoe_history` | Searchable conversation dialogue |
 | `zoe_documents` | Chunked PDF text |
 | `zoe_code` | Chunked project source code |
 
@@ -84,7 +86,9 @@ All collections share the same database path via `core/chroma.py`.
 4. Handle vision requests via `vision/pipeline.analyze_image()`
 5. Return empty-index guidance for notes, PDF, or code when applicable
 6. Build routed context via `brain/context.py`
-7. Generate LLM reply via `brain/generation.py`
+7. Inject conversation history from `conversation/retriever.py` when available
+8. Generate LLM reply via `brain/generation.py`
+9. Persist the exchange to `data/history/chat.jsonl`
 
 ## Retrieval Flow
 
@@ -93,6 +97,7 @@ The tool router selects **one** retrieval source per message:
 | Route | Source |
 |-------|--------|
 | `memory` | `memory/retriever.py` |
+| `conversation` | `conversation/retriever.py` (injected when history exists) |
 | `notes` | `rag/retriever.py` |
 | `pdf` | `pdf/retriever.py` |
 | `code` | `codebase/retriever.py` |

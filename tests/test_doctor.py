@@ -114,6 +114,9 @@ def test_run_doctor_never_raises_and_returns_report() -> None:
         "core.doctor.check_cli",
         return_value=CheckResult("CLI", CheckStatus.PASS, details=["Commands: chat, doctor"]),
     ), patch(
+        "core.doctor.check_conversation_history",
+        return_value=CheckResult("Conversation", CheckStatus.PASS),
+    ), patch(
         "core.doctor.check_model",
         return_value=CheckResult("Model", CheckStatus.PASS),
     ), patch(
@@ -124,7 +127,7 @@ def test_run_doctor_never_raises_and_returns_report() -> None:
 
     assert isinstance(report, DoctorReport)
     assert report.overall_status == CheckStatus.FAIL
-    assert len(report.checks) == 16
+    assert len(report.checks) == 17
     assert report.recommended_fixes
 
 

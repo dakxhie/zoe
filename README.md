@@ -2,7 +2,7 @@
 
 My personal AI assistant — a local-first LLM with notes, memory, PDF, code, web, and vision capabilities.
 
-Version: v2.0
+Version: v2.1
 
 ## Project Architecture
 
@@ -57,7 +57,7 @@ flowchart TD
 | Folder | Responsibility |
 |--------|----------------|
 | `brain/` | Model loading, context building, chat pipeline, and generation |
-| `cli/` | User commands: `chat`, `ingest`, `code`, `image`, `doctor`, `train` |
+| `cli/` | User commands: `chat`, `ingest`, `code`, `image`, `doctor`, `history`, `train` |
 | `core/` | Shared config, Chroma helpers, logging, indexing utilities |
 | `rag/` | Personal notes loading, embedding, indexing, and search |
 | `memory/` | Memory detection, storage, retrieval, and conversation history |
@@ -171,7 +171,30 @@ python cli/main.py chat
 1. **Detection** — `memory/detector.py` decides whether a message contains personal information.
 2. **Storage** — accepted messages are saved to `zoe_memory` via `memory/store.py`.
 3. **Retrieval** — memory-related queries are routed to the memory tool.
-4. **Conversation history** — the last 10 in-memory messages (FIFO) are included via `memory/history.py`.
+4. **Conversation history** — persistent dialogue is stored in `data/history/chat.jsonl`, indexed in `zoe_history`, and the last 20 messages are included in prompts via `conversation/`.
+
+## Conversation History
+
+Persistent dialogue is separate from long-term memory facts.
+
+| Component | Location |
+|-----------|----------|
+| Raw messages | `data/history/chat.jsonl` |
+| Session id | `data/history/session.json` |
+| Summary | `data/history/summary.json` |
+| Semantic index | Chroma collection `zoe_history` |
+
+CLI commands:
+
+```bash
+python cli/main.py history
+python cli/main.py history sessions
+python cli/main.py history summary
+python cli/main.py history clear
+python cli/main.py history stats
+```
+
+Summarization runs automatically after 40 messages using the local LLM. Prompts use the latest summary plus the 20 most recent raw messages.
 
 ## How Tools Work
 

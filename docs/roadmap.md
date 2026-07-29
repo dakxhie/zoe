@@ -45,6 +45,13 @@
 - Startup diagnostics and system check script
 - Documentation refresh
 
+### v2.1 — Persistent Conversation History
+- JSONL storage in `data/history/`
+- Session management and startup restore
+- Conversation summarization after 40 messages
+- Semantic search via `zoe_history`
+- CLI `history` commands
+
 ### v2.0 — Final Integration
 - Timezone-aware datetime tool
 - Conversational memory inference

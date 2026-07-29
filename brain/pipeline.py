@@ -29,6 +29,19 @@ def _record_exchange(user_prompt: str, assistant_reply: str) -> None:
     add_message("assistant", assistant_reply)
 
 
+def _prepare_chat_session() -> None:
+    """Initialize a chat session and restore prior history when available."""
+    from conversation.history import history_exists, restore_message_cache
+    from conversation.session import create_session
+
+    create_session()
+    restore_message_cache()
+    if history_exists():
+        print("✓ Previous conversation restored")
+    else:
+        print("✓ Starting new conversation")
+
+
 def _try_save_memory(text: str) -> bool:
     """Attempt to store a conversation memory without interrupting chat."""
     try:
@@ -54,7 +67,7 @@ def generate_image_response(
         return f"Sorry, I could not extract any information from the image: {image_path}"
 
     loaded_tokenizer, loaded_model = load_model()
-    history = get_history()
+    history = get_history(max_messages=20)
     user_question = prompt.strip() or "Describe this image."
     messages = _build_chat_messages(
         user_question,
@@ -117,7 +130,7 @@ def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
 
     loaded_tokenizer, loaded_model = load_model()
 
-    history = get_history()
+    history = get_history(max_messages=20)
     effective_analysis_context = analysis_context if is_analysis else ""
     messages = _build_chat_messages(
         prompt,

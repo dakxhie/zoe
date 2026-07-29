@@ -31,6 +31,11 @@ WEB_DISAGREEMENT_INSTRUCTION = (
     "When sources disagree, include all retrieved evidence and do not invent a consensus."
 )
 VISION_HEADING = "## Vision Context"
+CONVERSATION_HEADING = (
+    "========================\n"
+    "Conversation History\n"
+    "========================"
+)
 
 MAX_CONTEXT_CHARS = 6000
 MAX_ITEM_CHARS = 1500
@@ -61,6 +66,39 @@ def _log_turn_debug(
     logger.debug("Web enabled: %s", "yes" if web else "no")
     logger.debug("Memory matches: %s", memory_matches)
     logger.debug("Prompt characters: %s", prompt_chars)
+
+
+def _retrieve_conversation(user_prompt: str) -> str:
+    """Retrieve searchable conversation context when history exists."""
+    try:
+        from conversation.history import history_exists, load_history
+        from conversation.retriever import retrieve_conversation_context
+        from conversation.summarizer import load_summary, summary_as_text
+
+        if not history_exists():
+            return ""
+
+        recent_messages = load_history()[-20:]
+        return retrieve_conversation_context(
+            user_prompt,
+            summary_text=summary_as_text(load_summary()),
+            recent_messages=recent_messages,
+        )
+    except Exception as exc:
+        logger.warning("Conversation retrieval failed: %s", exc)
+        return ""
+
+
+def _merge_conversation_context(user_prompt: str, routed_context: str) -> str:
+    """Prepend conversation context before routed retrieval context."""
+    conversation_context = _retrieve_conversation(user_prompt)
+    if not conversation_context.strip():
+        return routed_context
+
+    conversation_block = f"{CONVERSATION_HEADING}\n\n{conversation_context}"
+    if routed_context.strip():
+        return f"{conversation_block}\n\n{routed_context}"
+    return conversation_block
 
 
 def _empty_index_message(tool: str) -> str | None:
@@ -446,17 +484,19 @@ def _build_chat_messages(
                 MAX_CONTEXT_CHARS,
             )
             _log_web_retrieval(truncated_context, stats)
-            system_content = _build_web_system_content(truncated_context)
-            context_chars = len(truncated_context)
+            merged_context = _merge_conversation_context(user_question, truncated_context)
+            system_content = _build_web_system_content(merged_context)
+            context_chars = len(merged_context)
             chunks = stats.get("pages_retrieved", 0)
         else:
             logger.info(
                 "Web route selected but retrieval returned empty; "
                 "falling back to normal chat generation"
             )
-            system_content = _build_system_content("")
+            system_content = _build_system_content(_merge_conversation_context(user_question, ""))
     else:
         context = _build_merged_context(user_question, selected_route=tool)
+        context = _merge_conversation_context(user_question, context)
         context_chars = len(context)
         chunks = _count_retrieved_chunks(user_question, selected_route=tool)
         if tool == "memory":

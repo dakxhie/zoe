@@ -2,6 +2,21 @@
 
 All notable changes to Zoe AI are documented here.
 
+## v2.1.0 — 2026-07-29
+
+### Added
+- Persistent conversation history (`conversation/`) with JSONL storage in `data/history/`
+- Session management with UUID4 sessions per chat launch
+- Conversation summarization for chats longer than 40 messages
+- Semantic search over prior dialogue via `zoe_history` Chroma collection
+- CLI history commands: `history`, `history sessions`, `history summary`, `history clear`, `history stats`
+- Doctor checks for conversation storage, files, and `zoe_history` collection
+
+### Changed
+- Chat startup restores prior conversations and prints restore status
+- Context pipeline injects conversation history after memory routing
+- `memory/history.py` now delegates to persistent conversation storage
+
 ## v2.0.0 — 2026-07-28
 
 ### Added

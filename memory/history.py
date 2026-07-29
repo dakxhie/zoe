@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import TypedDict
 
-MAX_STORED_MESSAGES = 10
+from conversation.history import append_message as persist_message
+from conversation.history import clear_history as clear_persistent_history
+from conversation.history import last_messages
+
+MAX_STORED_MESSAGES = 20
 
 
 class HistoryMessage(TypedDict):
@@ -14,26 +18,16 @@ class HistoryMessage(TypedDict):
     content: str
 
 
-_history: list[HistoryMessage] = []
-
-
 def add_message(role: str, content: str) -> None:
-    """Add one message and keep only the latest stored messages."""
-    message: HistoryMessage = {"role": role, "content": content}
-    _history.append(message)
-
-    while len(_history) > MAX_STORED_MESSAGES:
-        _history.pop(0)
+    """Add one message to persistent conversation history."""
+    persist_message(role, content)
 
 
-def get_history(max_messages: int = 10) -> list[HistoryMessage]:
+def get_history(max_messages: int = MAX_STORED_MESSAGES) -> list[HistoryMessage]:
     """Return the most recent conversation messages in order."""
-    if max_messages <= 0:
-        return []
-
-    return _history[-max_messages:].copy()
+    return last_messages(max_messages)
 
 
 def clear_history() -> None:
-    """Clear all in-memory conversation history."""
-    _history.clear()
+    """Clear all conversation history."""
+    clear_persistent_history()

@@ -10,7 +10,7 @@ from core.config import ROOT
 CLI_MAIN = ROOT / "cli" / "main.py"
 
 EXPECTED_COMMANDS: frozenset[str] = frozenset(
-    {"chat", "doctor", "image", "train", "code", "ingest"}
+    {"chat", "doctor", "history", "image", "train", "code", "ingest"}
 )
 
 
@@ -36,5 +36,8 @@ def discover_cli_commands() -> list[str]:
             commands.append(function_name[:-4])
         else:
             commands.append(function_name)
+
+    for match in re.finditer(r'app\.add_typer\([^,]+,\s*name="([^"]+)"\)', source):
+        commands.append(match.group(1))
 
     return sorted(set(commands))

@@ -33,6 +33,7 @@ EXPECTED_FOLDERS: tuple[tuple[str, bool], ...] = (
     ("data/notes", True),
     ("data/pdfs", True),
     ("data/code", False),
+    ("data/history", False),
     ("cache", False),
     ("docs", True),
     ("scripts", True),
@@ -44,6 +45,7 @@ KNOWN_COLLECTIONS: tuple[tuple[str, str], ...] = (
     (COLLECTION_NOTES, "docs"),
     (COLLECTION_PDF, "chunks"),
     (COLLECTION_CODE, "files"),
+    ("zoe_history", "messages"),
 )
 
 
@@ -617,6 +619,85 @@ def check_model() -> CheckResult:
     )
 
 
+def check_conversation_history() -> CheckResult:
+    """Verify conversation history storage, files, and Chroma collection."""
+    from conversation.retriever import COLLECTION_NAME
+    from conversation.storage import (
+        CHAT_FILE,
+        HISTORY_DIR,
+        SESSION_FILE,
+        SUMMARY_FILE,
+        chat_file_exists,
+        ensure_history_dir,
+        iter_messages,
+        read_json_file,
+    )
+    from core.chroma import ChromaError, collection_count
+
+    details: list[str] = []
+    fixes: list[str] = []
+    failed = False
+    warned = False
+
+    try:
+        ensure_history_dir()
+        details.append(f"{HISTORY_DIR}/ available")
+    except Exception as exc:
+        failed = True
+        details.append(f"History folder missing: {exc}")
+        fixes.append("Create data/history/ or run python cli/main.py chat")
+
+    if chat_file_exists():
+        details.append("chat.jsonl readable")
+        corrupt_lines = 0
+        if CHAT_FILE.exists():
+            import json
+
+            with CHAT_FILE.open(encoding="utf-8") as handle:
+                for _line_number, line in enumerate(handle, start=1):
+                    if not line.strip():
+                        continue
+                    try:
+                        json.loads(line)
+                    except json.JSONDecodeError:
+                        corrupt_lines += 1
+                        warned = True
+        if corrupt_lines:
+            details.append(f"chat.jsonl has {corrupt_lines} corrupt line(s)")
+    else:
+        details.append("chat.jsonl missing or empty")
+
+    session_payload = read_json_file(SESSION_FILE)
+    if session_payload is None and SESSION_FILE.exists():
+        failed = True
+        details.append("session.json unreadable")
+    elif session_payload is not None:
+        details.append("session.json readable")
+
+    summary_payload = read_json_file(SUMMARY_FILE)
+    if summary_payload is None and SUMMARY_FILE.exists():
+        warned = True
+        details.append("summary.json unreadable")
+    elif summary_payload is not None:
+        details.append("summary.json readable")
+
+    try:
+        count = collection_count(COLLECTION_NAME)
+        details.append(f"{COLLECTION_NAME}: {count} message(s)")
+    except ChromaError as exc:
+        failed = True
+        details.append(f"{COLLECTION_NAME} unavailable: {exc}")
+
+    if failed:
+        status = CheckStatus.FAIL
+    elif warned:
+        status = CheckStatus.WARN
+    else:
+        status = CheckStatus.PASS
+
+    return CheckResult("Conversation", status, details=details, fixes=fixes)
+
+
 def check_runtime() -> tuple[CheckResult, dict[str, str]]:
     """Collect runtime environment information."""
     runtime: dict[str, str] = {
@@ -717,6 +798,7 @@ def run_doctor() -> DoctorReport:
         check_agents,
         check_tools,
         check_cli,
+        check_conversation_history,
         check_model,
     ):
         result = _safe_call("Check", check_fn)

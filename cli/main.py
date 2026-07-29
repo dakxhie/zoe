@@ -60,8 +60,10 @@ def _should_exit(user_input: str) -> bool:
 def _run_chat_loop() -> None:
     """Run the interactive chat session until the user exits."""
     from brain.model import ModelLoadError, generate_response
+    from brain.pipeline import _prepare_chat_session
 
     _print_welcome()
+    _prepare_chat_session()
     print_startup_diagnostics()
     print()
 
@@ -176,6 +178,77 @@ def ingest() -> None:
     print("Done.")
     print()
     print("--------------------------------")
+
+
+history_app = typer.Typer(help="Manage persistent conversation history.")
+app.add_typer(history_app, name="history")
+
+
+@history_app.callback(invoke_without_command=True)
+def history_default(ctx: typer.Context) -> None:
+    """Print the last 20 conversation messages."""
+    if ctx.invoked_subcommand is not None:
+        return
+
+    from conversation.history import last_messages
+
+    messages = last_messages(20)
+    if not messages:
+        print("No conversation history found.")
+        return
+
+    for message in messages:
+        role = message["role"].capitalize()
+        print(f"{role}: {message['content']}")
+
+
+@history_app.command("sessions")
+def history_sessions() -> None:
+    """List all conversation session ids."""
+    from conversation.history import all_sessions
+
+    sessions = all_sessions()
+    if not sessions:
+        print("No sessions found.")
+        return
+
+    for session_id in sessions:
+        print(session_id)
+
+
+@history_app.command("summary")
+def history_summary() -> None:
+    """Print the persisted conversation summary."""
+    from conversation.summarizer import load_summary, summary_as_text
+
+    summary = summary_as_text(load_summary())
+    if not summary:
+        print("No conversation summary found.")
+        return
+
+    print(summary)
+
+
+@history_app.command("clear")
+def history_clear() -> None:
+    """Delete persisted conversation history."""
+    from conversation.history import clear_history
+
+    clear_history()
+    print("Conversation history cleared.")
+
+
+@history_app.command("stats")
+def history_stats() -> None:
+    """Print conversation history statistics."""
+    from conversation.history import conversation_statistics
+
+    stats = conversation_statistics()
+    print(f"Messages: {stats.messages}")
+    print(f"Sessions: {stats.sessions}")
+    print(f"Token estimate: {stats.token_estimate}")
+    print(f"Summary size: {stats.summary_size} chars")
+    print(f"Database size: {stats.database_size} bytes")
 
 
 if __name__ == "__main__":

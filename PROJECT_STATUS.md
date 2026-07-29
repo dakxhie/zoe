@@ -1,12 +1,12 @@
 # Zoe AI — Project Status
 
-**Version:** v2.0  
-**Last updated:** 2026-07-28  
+**Version:** v2.1  
+**Last updated:** 2026-07-29  
 **Branch:** `main`
 
 ## Summary
 
-Zoe AI is a local-first personal assistant with tool-routed retrieval, web research, vision analysis, conversational memory inference, and system diagnostics. v2.0 completes the final integration pass: timezone datetime, reliable doctor checks, analysis prompt injection, lazy model loading, and expanded pytest coverage.
+Zoe AI is a local-first personal assistant with tool-routed retrieval, web research, vision analysis, conversational memory inference, persistent conversation history, and system diagnostics.
 
 ## Subsystem Status
 
@@ -22,6 +22,7 @@ Zoe AI is a local-first personal assistant with tool-routed retrieval, web resea
 | Tools | ✅ Complete | `tools/router.py` |
 | Agents | ✅ Complete | `agents/analyzer.py` |
 | Doctor | ✅ Complete | `core/doctor.py` |
+| Conversation | ✅ Complete | `conversation/history.py` |
 | CLI | ✅ Complete | `cli/main.py` |
 | CI | ✅ Partial | `.github/workflows/tests.yml` |
 
@@ -49,6 +50,7 @@ Zoe AI is a local-first personal assistant with tool-routed retrieval, web resea
 | Web | ✅ | ✅ |
 | Vision | ✅ | ✅ |
 | Doctor / diagnostics | ✅ | ✅ |
+| Conversation history | ✅ | ❌ |
 | Analysis pipeline | ✅ | ✅ |
 | Indexers | ❌ | ✅ |
 
