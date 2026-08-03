@@ -37,13 +37,14 @@ def test_check_configuration_reports_missing_keys() -> None:
     assert any("Missing keys" in detail for detail in result.details)
 
 
-def test_discover_cli_commands_from_source() -> None:
-    """Discover CLI commands without importing cli.main."""
+def test_discover_cli_commands_from_typer_app() -> None:
+    """Discover CLI commands from the registered Typer application."""
     commands = discover_cli_commands()
 
     assert "chat" in commands
     assert "doctor" in commands
     assert "ingest" in commands
+    assert "history" in commands
 
 
 def test_check_cli_passes_with_expected_commands() -> None:

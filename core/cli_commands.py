@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from core.config import ROOT
@@ -14,30 +13,37 @@ EXPECTED_COMMANDS: frozenset[str] = frozenset(
 )
 
 
+def command_names_from_typer_app(typer_app: object) -> list[str]:
+    """Return sorted top-level command names registered on a Typer application."""
+    import typer.main as typer_main
+
+    group = typer_main.get_group(typer_app)
+    return sorted(group.commands.keys())
+
+
+def nested_command_names(typer_app: object, group_name: str) -> list[str]:
+    """Return sorted subcommand names for a named Typer group on the application."""
+    import typer.main as typer_main
+
+    group = typer_main.get_group(typer_app)
+    sub_group = group.commands.get(group_name)
+    if sub_group is None or not hasattr(sub_group, "commands"):
+        return []
+
+    return sorted(sub_group.commands.keys())
+
+
 def discover_cli_commands() -> list[str]:
-    """Discover registered CLI commands from cli/main.py without importing it."""
+    """Discover registered top-level CLI commands from the Typer application."""
     if not CLI_MAIN.exists():
         return []
 
-    source = CLI_MAIN.read_text(encoding="utf-8")
-    commands: list[str] = []
+    try:
+        from cli.main import app
+    except Exception:
+        return []
 
-    pattern = re.compile(
-        r'@app\.command(?:\("([^"]+)"\))?\s*\ndef\s+([a-zA-Z_][a-zA-Z0-9_]*)',
-        re.MULTILINE,
-    )
-
-    for explicit_name, function_name in pattern.findall(source):
-        if explicit_name:
-            commands.append(explicit_name)
-            continue
-
-        if function_name.endswith("_cmd"):
-            commands.append(function_name[:-4])
-        else:
-            commands.append(function_name)
-
-    for match in re.finditer(r'app\.add_typer\([^,]+,\s*name="([^"]+)"\)', source):
-        commands.append(match.group(1))
-
-    return sorted(set(commands))
+    try:
+        return command_names_from_typer_app(app)
+    except Exception:
+        return []
