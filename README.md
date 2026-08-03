@@ -2,15 +2,30 @@
 
 My personal AI assistant — a local-first LLM with notes, memory, PDF, code, web, and vision capabilities.
 
-Version: v2.1
+Version: v2.4
 
-## Project Architecture
+## Voice assistant (offline)
+
+Enable voice in **Settings → Voice**, then use the microphone button or **Ctrl+Shift+V** to enable push-to-talk.
+
+- **Space** — push to talk (when focus is not in the text box)
+- **Esc** — stop speaking
+- Pipeline: microphone → Whisper → `brain.pipeline.generate_response()` → pyttsx3
+
+## Zoe Desktop (primary UI)
+
+```bash
+python desktop/app.py
+```
+
+The desktop UI calls the existing backend (`brain.pipeline.generate_response`, vision pipeline, indexers, doctor) on background threads. The CLI remains fully supported.
 
 Zoe AI is built around a Hugging Face chat model with tool routing, multiple retrieval layers backed by ChromaDB, web search, and vision analysis.
 
 ```mermaid
 flowchart TD
     CLI[cli/main.py]
+    Desktop[desktop/app.py]
     Pipeline[brain/pipeline.py]
     Context[brain/context.py]
     Generation[brain/generation.py]
@@ -26,6 +41,7 @@ flowchart TD
     Chroma[(storage/chroma)]
 
     CLI --> Pipeline
+    Desktop --> Pipeline
     Pipeline --> Tools
     Pipeline --> Agents
     Pipeline --> Context
@@ -57,7 +73,9 @@ flowchart TD
 | Folder | Responsibility |
 |--------|----------------|
 | `brain/` | Model loading, context building, chat pipeline, and generation |
-| `cli/` | User commands: `chat`, `ingest`, `code`, `image`, `doctor`, `history`, `train` |
+| `desktop/` | PySide6 desktop UI and voice controls |
+| `voice/` | Offline voice capture, Whisper STT, pyttsx3 TTS, local commands |
+| `cli/` | Terminal commands: `chat`, `ingest`, `code`, `image`, `doctor`, `history`, `train` |
 | `core/` | Shared config, Chroma helpers, logging, indexing utilities |
 | `rag/` | Personal notes loading, embedding, indexing, and search |
 | `memory/` | Memory detection, storage, retrieval, and conversation history |
@@ -66,7 +84,7 @@ flowchart TD
 | `web/` | DuckDuckGo search, webpage reading, caching, and retrieval |
 | `vision/` | Image loading, OCR, captioning, and unified vision pipeline |
 | `tools/` | Tool routing, calculator, datetime, and filesystem tools |
-| `agents/` | Project analysis planner and executor |
+| `agents/` | Agent orchestration: intent, planning, multi-tool execution, recovery, and verification |
 | `config/` | Runtime settings in `settings.txt` |
 | `data/` | Notes and PDF input files |
 | `scripts/` | Standalone smoke and integration test scripts |
@@ -210,7 +228,7 @@ The tool router (`tools/router.py`) classifies queries into: `chat`, `memory`, `
 
 ## How Planners Work
 
-For project analysis queries, the agent layer runs: search code → read files → gather context → summarize → recommend.
+For project analysis and multi-tool requests, the agent layer analyzes intent, builds an internal plan, executes tools with recovery, fuses ranked context, verifies quality, then generates the answer. Project analysis still runs: search code → read files → gather context → summarize → recommend, with an added structured project report.
 
 ## How to Run Tests
 

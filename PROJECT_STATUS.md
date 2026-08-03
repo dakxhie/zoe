@@ -1,7 +1,7 @@
 # Zoe AI — Project Status
 
-**Version:** v2.1  
-**Last updated:** 2026-07-29  
+**Version:** v2.4  
+**Last updated:** 2026-08-03  
 **Branch:** `main`
 
 ## Summary
@@ -20,10 +20,12 @@ Zoe AI is a local-first personal assistant with tool-routed retrieval, web resea
 | Web | ✅ Complete | `web/retriever.py` |
 | Vision | ✅ Complete | `vision/pipeline.py` |
 | Tools | ✅ Complete | `tools/router.py` |
-| Agents | ✅ Complete | `agents/analyzer.py` |
+| Agents | ✅ Complete | `agents/orchestrator.py` |
 | Doctor | ✅ Complete | `core/doctor.py` |
 | Conversation | ✅ Complete | `conversation/history.py` |
 | CLI | ✅ Complete | `cli/main.py` |
+| Desktop | ✅ Complete | `desktop/app.py` |
+| Voice | ✅ Complete | `voice/manager.py` |
 | CI | ✅ Partial | `.github/workflows/tests.yml` |
 
 ## v2 Integration (2026-07-28)
@@ -50,13 +52,15 @@ Zoe AI is a local-first personal assistant with tool-routed retrieval, web resea
 | Web | ✅ | ✅ |
 | Vision | ✅ | ✅ |
 | Doctor / diagnostics | ✅ | ✅ |
+| Desktop UI | ✅ | ❌ |
+| Voice | ✅ | ❌ |
 | Conversation history | ✅ | ❌ |
 | Analysis pipeline | ✅ | ✅ |
 | Indexers | ❌ | ✅ |
 
 ## Known Limitations
 
-- Conversation history is in-memory only (lost on restart)
+- Conversation history persists to `data/history/` (Sprint 11); desktop GUI adds session rename/delete UX
 - `train` CLI command is a placeholder
 - Chroma deduplication scans full collections on index builds
 - `docs/personality.md` is not loaded at runtime
@@ -65,6 +69,7 @@ Zoe AI is a local-first personal assistant with tool-routed retrieval, web resea
 
 ```bash
 pip install -r requirements.txt
+python desktop/app.py
 python cli/main.py ingest
 python cli/main.py code .
 python cli/main.py chat

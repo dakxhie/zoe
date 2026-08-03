@@ -454,6 +454,7 @@ def _build_chat_messages(
     analysis_context: str = "",
     vision_context: str = "",
     selected_route: str | None = None,
+    agent_context: str = "",
 ) -> list[dict[str, str]]:
     """Build chat messages with system context, history, and the current user turn."""
     tool = selected_route or route_query(user_question)
@@ -475,6 +476,13 @@ def _build_chat_messages(
         system_content = _build_vision_system_content(context)
         context_chars = len(context)
         chunks = 1
+    elif agent_context.strip():
+        context = _truncate_text(agent_context, MAX_CONTEXT_CHARS)
+        context_chars = len(context)
+        chunks = max(1, context.count("========================") + context.count("##"))
+        system_content = _build_system_content(context)
+        if tool == "memory":
+            memory_matches = chunks
     elif tool == "web":
         web_context, stats = _prepare_web_context(user_question)
         web_enabled = bool(web_context)

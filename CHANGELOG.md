@@ -2,6 +2,49 @@
 
 All notable changes to Zoe AI are documented here.
 
+## v2.4.0 — 2026-08-03
+
+### Added
+- Offline **voice assistant** package (`voice/`) with Whisper STT, pyttsx3 TTS, push-to-talk, and silence detection
+- `VoiceManager` state machine (idle → listen → recognize → think → speak)
+- Local voice commands (settings, doctor, indexing, datetime/calculator tools)
+- Desktop voice UI: `voice_widget.py`, `microphone_button.py`, Settings **Voice** tab
+- Voice pytest suite (manager, recognizer, speaker, commands, pipeline)
+
+### Changed
+- Desktop Stop cancels TTS and LLM workers
+- Voice uses `brain.pipeline.generate_response()` and Sprint 11/12 backend automatically
+
+## v2.3.0 — 2026-08-03
+
+### Added
+- **Zoe Desktop** (`desktop/`) — PySide6 Qt Widgets application and primary GUI
+- MVC-style UI: chat bubbles, sidebar, history dock, settings, index manager, doctor cards
+- Background workers (`QThread` / `QRunnable`) for chat, vision, indexing, and doctor
+- Drag-and-drop for images, PDFs, and notes
+- Desktop pytest coverage: startup, workers, history panel, settings
+
+### Changed
+- README and architecture docs describe desktop + CLI dual entrypoints
+- `requirements.txt` includes `PySide6`
+
+## v2.2.0 — 2026-08-03
+
+### Added
+- Agent orchestration layer: intent analysis, internal planning, multi-tool execution, recovery, verification, and retrieval fusion
+- `agents/state.py`, `agents/intent.py`, `agents/fusion.py`, `agents/recovery.py`, `agents/verifier.py`, `agents/orchestrator.py`, `agents/project_report.py`
+- Structured project analysis report (language, framework, tests, entry points, hotspots)
+- DEBUG timing metrics for planner, retrieval, tools, and generation
+- Pytest suite `tests/test_agent_system.py`
+
+### Changed
+- `brain/pipeline.generate_response()` routes through `agents/orchestrator.orchestrate_chat_turn()` after memory save and lightweight tools
+- `brain/context._build_chat_messages()` accepts fused agent context without duplicating sections
+- Project analysis context includes a structured report before gathered files/code
+
+### Fixed
+- Partial tool failures no longer abort multi-step agent execution (notes/memory/web fallbacks)
+
 ## v2.1.0 — 2026-07-29
 
 ### Added

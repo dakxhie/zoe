@@ -72,7 +72,18 @@
 - Speech input and output
 - Optional screen/context ingestion
 
-### Sprint 12 — Packaging and Deployment
+### Sprint 11 — Agent Orchestration (complete)
+- Intent analysis, internal planning, multi-tool execution, recovery, verification, and retrieval fusion
+- Structured project analysis reports
+- DEBUG execution timings
+
+### Sprint 12 — Zoe Desktop (complete)
+- PySide6 primary GUI with workers, history panel, settings, index manager, doctor view
+
+### Sprint 13 — Voice Assistant (complete)
+- Offline Whisper + pyttsx3 pipeline integrated with desktop
+
+### Sprint 14 — Packaging and Deployment
 - Installable package metadata (`pyproject.toml`)
 - Reproducible environment presets
 - Local GPU and Colab presets
@@ -84,7 +95,6 @@
 
 ## Long-Term Goals
 
-- Multi-agent coordination
 - Fine-tuning and personalization
 - Production deployment workflow
 - VS Code / IDE integration

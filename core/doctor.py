@@ -502,6 +502,9 @@ def check_agents() -> CheckResult:
         ("planner", "agents.planner"),
         ("executor", "agents.executor"),
         ("analyzer", "agents.analyzer"),
+        ("verifier", "agents.verifier"),
+        ("recovery", "agents.recovery"),
+        ("state", "agents.state"),
     )
 
     for label, module_name in modules:

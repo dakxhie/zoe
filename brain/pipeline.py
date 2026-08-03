@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
+import time
 
-from agents.analyzer import run_project_analysis
 from memory.history import add_message, get_history
 from memory.store import save_memory
 from tools.executor import execute_tool
@@ -15,10 +15,9 @@ from brain.context import (
     _log_turn_debug,
     _retrieve_vision,
     build_vision_context,
-    get_empty_index_response,
 )
 from brain.generation import generate_text, load_model
-from tools.router import extract_image_path, route_query
+from tools.router import extract_image_path
 
 logger = logging.getLogger(__name__)
 
@@ -108,43 +107,39 @@ def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
         _record_exchange(prompt, tool_result)
         return tool_result
 
-    is_analysis, analysis_context = run_project_analysis(prompt)
-    selected_route = route_query(prompt)
+    from agents.orchestrator import orchestrate_chat_turn
 
-    if selected_route == "vision":
-        image_path = extract_image_path(prompt)
-        if not image_path:
-            reply = "Please include a supported image file path in your request."
-            _record_exchange(prompt, reply)
-            return reply
+    generation_start = time.perf_counter()
+    turn = orchestrate_chat_turn(prompt)
+
+    if turn.use_vision_path:
+        image_path = turn.use_vision_path
         return generate_image_response(image_path, prompt, max_new_tokens=max_new_tokens)
 
-    if is_analysis and not analysis_context.strip():
-        logger.warning("Analysis enabled but context is empty; continuing without analysis injection")
+    if turn.direct_reply is not None:
+        _record_exchange(prompt, turn.direct_reply)
+        return turn.direct_reply
 
-    if not is_analysis:
-        empty_index_response = get_empty_index_response(prompt, selected_route)
-        if empty_index_response is not None:
-            _record_exchange(prompt, empty_index_response)
-            return empty_index_response
+    if turn.empty_index_response is not None:
+        _record_exchange(prompt, turn.empty_index_response)
+        return turn.empty_index_response
 
-    loaded_tokenizer, loaded_model = load_model()
+    if turn.messages is None:
+        from tools.router import route_query
 
-    history = get_history(max_messages=20)
-    effective_analysis_context = analysis_context if is_analysis else ""
-    messages = _build_chat_messages(
-        prompt,
-        history,
-        analysis_context=effective_analysis_context,
-        selected_route=selected_route,
-    )
+        loaded_tokenizer, loaded_model = load_model()
+        history = get_history(max_messages=20)
+        messages = _build_chat_messages(prompt, history, selected_route=route_query(prompt))
+    else:
+        loaded_tokenizer, loaded_model = load_model()
+        messages = turn.messages
 
-    system_content = messages[0]["content"]
-    logger.info("Prompt chars: %s", len(system_content))
-    if is_analysis:
-        logger.info("Analysis enabled: yes")
-        if "Project Analysis" not in system_content:
-            logger.warning("Analysis context was not injected into the system prompt")
+    if turn.state and turn.state.analysis_context.strip() and "Project Analysis" not in messages[0]["content"]:
+        logger.warning("Analysis context was not injected into the system prompt")
+
+    if logger.isEnabledFor(logging.DEBUG) and turn.state:
+        turn.state.timings.generation_ms = (time.perf_counter() - generation_start) * 1000
+        logger.debug("Generation time ms: %.1f", turn.state.timings.generation_ms)
 
     reply = generate_text(
         loaded_tokenizer,
