@@ -1,7 +1,7 @@
 # Zoe AI — Project Status
 
-**Version:** v2.4  
-**Last updated:** 2026-08-03  
+**Version:** v2.5  
+**Last updated:** 2026-08-04  
 **Branch:** `main`
 
 ## Summary
@@ -26,6 +26,7 @@ Zoe AI is a local-first personal assistant with tool-routed retrieval, web resea
 | CLI | ✅ Complete | `cli/main.py` |
 | Desktop | ✅ Complete | `desktop/app.py` |
 | Voice | ✅ Complete | `voice/manager.py` |
+| Regression | ✅ Complete | `tests/regression.py` |
 | CI | ✅ Partial | `.github/workflows/tests.yml` |
 
 ## v2 Integration (2026-07-28)
@@ -86,3 +87,14 @@ pytest tests/ -v
 | `docs/ROADMAP.md` | Completed and planned sprints |
 | `CHANGELOG.md` | Version history |
 | `PROJECT_AUDIT.md` | Historical Sprint 1.2 audit |
+
+## Running regression tests
+
+Before a release, run:
+
+```bash
+python tests/regression.py
+python tests/regression.py --full
+```
+
+The runner exercises doctor, memory, tools, agents, retrieval layers, optional desktop/voice imports, and (in full mode) web search, vision, startup diagnostics, and performance timings. It does not delete user indexes or settings; temporary memories are tagged and removed when possible. See `tests/reports/latest.txt` for the last summary.

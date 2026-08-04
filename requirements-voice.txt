@@ -1,0 +1,13 @@
+# Optional offline voice stack for Zoe AI.
+# Install after core requirements: pip install -r requirements-voice.txt
+#
+# PyAudio is optional. Zoe captures audio with sounddevice; PyAudio is only
+# needed for some SpeechRecognition microphone backends (not used by default).
+
+SpeechRecognition>=3.10.0,<4.0.0
+sounddevice>=0.4.6,<0.6.0
+openai-whisper>=20231117
+pyttsx3>=2.90,<3.0.0
+
+# Optional on Windows/Linux when using SpeechRecognition's PyAudio microphone API:
+# PyAudio>=0.2.14,<0.3.0

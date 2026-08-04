@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
+    QLabel,
     QLineEdit,
     QSpinBox,
     QTabWidget,
@@ -81,14 +82,25 @@ class SettingsDialog(QDialog):
 
         voice = QWidget()
         voice_form = QFormLayout(voice)
+        from voice.deps import voice_capture_available, voice_install_hint, voice_tts_available
+
+        if not voice_capture_available() or not voice_tts_available():
+            voice_form.addRow(
+                QLabel(
+                    f"Optional voice packages not installed. Run: {voice_install_hint()}\n"
+                    "Zoe works without them; microphone and TTS stay disabled until installed."
+                )
+            )
+
         self.voice_enabled = QCheckBox("Enable voice assistant")
         self.voice_enabled.setChecked(self.voice_settings.enabled)
         voice_form.addRow(self.voice_enabled)
 
         self.input_device = QComboBox()
         self.input_device.addItem("Default", "")
-        for device in list_input_devices():
-            self.input_device.addItem(device.name, device.name)
+        if voice_capture_available():
+            for device in list_input_devices():
+                self.input_device.addItem(device.name, device.name)
         if self.voice_settings.input_device:
             index = self.input_device.findData(self.voice_settings.input_device)
             if index >= 0:
@@ -97,8 +109,12 @@ class SettingsDialog(QDialog):
 
         self.output_device = QComboBox()
         self.output_device.addItem("Default", "")
-        for device in list_output_devices():
-            self.output_device.addItem(device.name, device.name)
+        try:
+            if voice_tts_available():
+                for device in list_output_devices():
+                    self.output_device.addItem(device.name, device.name)
+        except Exception:
+            pass
         if self.voice_settings.output_device:
             index = self.output_device.findData(self.voice_settings.output_device)
             if index >= 0:

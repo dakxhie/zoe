@@ -48,8 +48,11 @@ from desktop.workers import (
 )
 
 from voice.commands import VoiceAction
+from voice.deps import voice_capture_available, voice_install_hint
 from voice.manager import VoiceManager
 from voice.settings import VoiceSettings
+
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 PDF_SUFFIXES = {".pdf"}
 TEXT_SUFFIXES = {".txt", ".md"}
 
@@ -89,6 +92,11 @@ class MainWindow(QMainWindow):
         self.voice_manager = VoiceManager(self.voice_settings, self)
         self.voice_manager.set_prepare_session(self._ensure_chat_session)
         self.voice_widget = VoiceWidget()
+        if not voice_capture_available():
+            self.voice_widget.status_label.setText(
+                f"Voice: optional packages missing ({voice_install_hint()})"
+            )
+            self.voice_widget.microphone.setEnabled(False)
         layout.addWidget(self.voice_widget)
 
         layout.addWidget(self.input_bar)

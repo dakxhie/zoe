@@ -58,8 +58,14 @@ class SpeechSpeaker:
         self._volume = max(0.0, min(value, 1.0))
 
     def speak(self, text: str) -> None:
-        if text.strip():
-            self._queue.put(text)
+        if not text.strip():
+            return
+        from voice.deps import voice_tts_available
+
+        if not voice_tts_available():
+            logger.warning("TTS unavailable; install pyttsx3 via requirements-voice.txt")
+            return
+        self._queue.put(text)
 
     def cancel(self) -> None:
         self._stop_event.set()

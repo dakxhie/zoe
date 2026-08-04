@@ -137,6 +137,15 @@ class VoiceManager(QObject):
         if not self.settings.enabled:
             self.error_occurred.emit("Voice is disabled in settings.")
             return
+        from voice.deps import voice_capture_available, voice_install_hint
+
+        if not voice_capture_available():
+            self.error_occurred.emit(
+                f"Microphone capture unavailable. Install optional voice packages: {voice_install_hint()}"
+            )
+            self._set_state(VoiceState.ERROR)
+            self._set_state(VoiceState.IDLE)
+            return
         if self.state in {VoiceState.LISTENING, VoiceState.RECOGNIZING, VoiceState.THINKING}:
             return
         if self.state == VoiceState.SPEAKING:
@@ -176,6 +185,14 @@ class VoiceManager(QObject):
 
     def _on_capture_complete(self, capture) -> None:
         self._set_state(VoiceState.RECOGNIZING)
+        from voice.deps import voice_stt_available, voice_install_hint
+
+        if not voice_stt_available():
+            self.error_occurred.emit(
+                f"Speech recognition unavailable. Install optional voice packages: {voice_install_hint()}"
+            )
+            self._set_state(VoiceState.IDLE)
+            return
         try:
             with debug_timer("Speech recognition total"):
                 result: RecognitionResult = transcribe(
@@ -219,6 +236,11 @@ class VoiceManager(QObject):
 
     def speak(self, text: str) -> None:
         if self.state == VoiceState.MUTED:
+            return
+        from voice.deps import voice_tts_available
+
+        if not voice_tts_available():
+            self._set_state(VoiceState.IDLE)
             return
         self._set_state(VoiceState.SPEAKING)
 

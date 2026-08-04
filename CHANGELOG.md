@@ -2,6 +2,20 @@
 
 All notable changes to Zoe AI are documented here.
 
+## v2.5.0 — 2026-08-04
+
+### Added
+- **Automated regression framework** (`tests/regression.py`, `tests/regression/`) for end-to-end release verification
+- Quick mode (`python tests/regression.py`) and full mode (`--full`) with colored console report and `tests/reports/latest.txt`
+- Reusable regression assertions, scenario runner (continues on failure), and cleanup of tagged test memories
+
+## v2.4.1 — 2026-08-04
+
+### Changed
+- Voice dependencies moved to optional `requirements-voice.txt` (no PyAudio required for install)
+- Doctor reports **Voice** as WARN when optional packages are missing, never FAIL
+- Desktop disables microphone gracefully when `sounddevice` is unavailable; TTS skipped without `pyttsx3`
+
 ## v2.4.0 — 2026-08-03
 
 ### Added

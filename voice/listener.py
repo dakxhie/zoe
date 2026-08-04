@@ -43,6 +43,14 @@ class AudioListener:
 
     def record_until_silence(self, max_seconds: float = 30.0) -> CaptureResult:
         """Record from the microphone until silence is detected."""
+        from voice.deps import voice_capture_available
+
+        if not voice_capture_available():
+            raise RuntimeError(
+                "Microphone capture unavailable. Install optional voice dependencies: "
+                "pip install -r requirements-voice.txt"
+            )
+
         import sounddevice as sd
 
         device_index = resolve_input_device_index(self.input_device)

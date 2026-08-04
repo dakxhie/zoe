@@ -2,11 +2,11 @@
 
 My personal AI assistant — a local-first LLM with notes, memory, PDF, code, web, and vision capabilities.
 
-Version: v2.4
+Version: v2.5
 
 ## Voice assistant (offline)
 
-Enable voice in **Settings → Voice**, then use the microphone button or **Ctrl+Shift+V** to enable push-to-talk.
+Enable voice in **Settings → Voice** (requires `pip install -r requirements-voice.txt`), then use the microphone button or **Ctrl+Shift+V** to enable push-to-talk.
 
 - **Space** — push to talk (when focus is not in the text box)
 - **Esc** — stop speaking
@@ -125,6 +125,14 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Optional offline voice (microphone, Whisper, TTS):
+
+```bash
+pip install -r requirements-voice.txt
+```
+
+PyAudio is **not** required. Zoe captures audio with `sounddevice`. Install PyAudio only if you use other SpeechRecognition microphone backends.
+
 4. Configure settings in `config/settings.txt` (especially `MODEL_NAME`).
 
 ## How to Chat
@@ -231,6 +239,17 @@ The tool router (`tools/router.py`) classifies queries into: `chat`, `memory`, `
 For project analysis and multi-tool requests, the agent layer analyzes intent, builds an internal plan, executes tools with recovery, fuses ranked context, verifies quality, then generates the answer. Project analysis still runs: search code → read files → gather context → summarize → recommend, with an added structured project report.
 
 ## How to Run Tests
+
+### Regression (release verification)
+
+End-to-end functional checks against the real Zoe stack (not a pytest replacement):
+
+```bash
+python tests/regression.py          # quick suite
+python tests/regression.py --full   # indexes, web, vision, imports, performance
+```
+
+Results print to the terminal and to `tests/reports/latest.txt`.
 
 ### Pytest
 

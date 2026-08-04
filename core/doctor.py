@@ -545,6 +545,48 @@ def check_tools() -> CheckResult:
     return CheckResult("Tools", status, details=details, fixes=fixes)
 
 
+def check_voice() -> CheckResult:
+    """Verify optional voice dependencies (WARN when missing, never FAIL)."""
+    try:
+        from voice.deps import (
+            voice_capture_available,
+            voice_dependency_status,
+            voice_install_hint,
+            voice_stt_available,
+            voice_tts_available,
+        )
+    except Exception as exc:
+        return CheckResult(
+            name="Voice",
+            status=CheckStatus.WARN,
+            details=[f"Voice module unavailable: {exc}"],
+            fixes=["pip install -r requirements-voice.txt"],
+        )
+
+    import importlib.util
+
+    status = voice_dependency_status()
+    details = [
+        f"Capture (sounddevice): {'available' if voice_capture_available() else 'missing'}",
+        f"STT: {'available' if voice_stt_available() else 'missing'}",
+        f"TTS (pyttsx3): {'available' if voice_tts_available() else 'missing'}",
+    ]
+    if importlib.util.find_spec("pyaudio") is None:
+        details.append("PyAudio: not installed (optional)")
+
+    if status.fully_available:
+        return CheckResult("Voice", CheckStatus.PASS, details=details)
+
+    for item in status.missing:
+        details.append(f"Missing: {item}")
+    return CheckResult(
+        name="Voice",
+        status=CheckStatus.WARN,
+        details=details,
+        fixes=[voice_install_hint()],
+    )
+
+
 def check_cli() -> CheckResult:
     """Verify CLI commands are registered."""
     from core.cli_commands import EXPECTED_COMMANDS, discover_cli_commands
@@ -798,6 +840,7 @@ def run_doctor() -> DoctorReport:
         check_vision,
         check_agents,
         check_tools,
+        check_voice,
         check_cli,
         check_conversation_history,
         check_model,
