@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from tools.calculator import CalculatorError, calculate, is_calculator_request
 from tools.datetime_tool import get_datetime_response
 from tools.filesystem import (
@@ -13,6 +15,8 @@ from tools.filesystem import (
 )
 from tools.router import route_query
 
+logger = logging.getLogger(__name__)
+
 FILESYSTEM_COMMANDS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("list files", "show files"), "list"),
     (("read file", "open file"), "read"),
@@ -22,7 +26,6 @@ FILESYSTEM_COMMANDS: tuple[tuple[tuple[str, ...], str], ...] = (
 
 
 def _extract_argument(query: str, phrases: tuple[str, ...]) -> str:
-    """Return the text following a matched filesystem command phrase."""
     lowered = query.lower()
     for phrase in phrases:
         index = lowered.find(phrase)
@@ -32,7 +35,6 @@ def _extract_argument(query: str, phrases: tuple[str, ...]) -> str:
 
 
 def _execute_filesystem(query: str) -> tuple[bool, str]:
-    """Execute a read-only filesystem tool request."""
     normalized = query.lower()
 
     for phrases, command in FILESYSTEM_COMMANDS:
@@ -62,6 +64,15 @@ def _execute_filesystem(query: str) -> tuple[bool, str]:
     return False, ""
 
 
+def _try_plugin_execute(query: str, route: str) -> tuple[bool, str]:
+    from plugins.manager import execute_plugin_route, initialize_plugins
+
+    initialize_plugins()
+    if route in {"chat", "vision", "filesystem"}:
+        return False, ""
+    return execute_plugin_route(query, route)
+
+
 def execute_tool(query: str) -> tuple[bool, str]:
     """Execute a lightweight tool when the query is handled outside the LLM."""
     tool = route_query(query)
@@ -71,6 +82,10 @@ def execute_tool(query: str) -> tuple[bool, str]:
         if handled:
             return True, result
         return False, ""
+
+    handled, result = _try_plugin_execute(query, tool)
+    if handled:
+        return True, result
 
     if tool != "chat":
         return False, ""

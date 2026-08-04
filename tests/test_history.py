@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from memory.history import add_message, clear_history, get_history
+from tests.conversation_fixtures import isolated_history  # noqa: F401
 
 
-def test_fifo_conversation_history() -> None:
+def test_fifo_conversation_history(isolated_history) -> None:
     """Keep only the most recent messages in FIFO order."""
     clear_history()
 

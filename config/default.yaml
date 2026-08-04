@@ -1,0 +1,31 @@
+zoe:
+  profile: developer
+  mode: local
+
+logging:
+  level: INFO
+  startup_verbose: false
+
+cache:
+  enabled: true
+
+telemetry:
+  enabled: true
+  local_only: true
+  path: data/telemetry
+
+diagnostics:
+  rich: true
+
+paths:
+  memory_db: storage/chroma
+  notes_folder: data/notes
+  pdf_folder: data/pdfs
+
+model:
+  name: ""
+
+startup:
+  verify_folders: true
+  initialize_plugins: true
+  initialize_agents: true

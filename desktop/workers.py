@@ -117,18 +117,21 @@ class StartupWorker(QThread):
     def run(self) -> None:
         lines: list[str] = []
         try:
+            self.line_ready.emit("Loading deployment config...")
+            from deployment.config import load_config
+            from deployment.startup import run_startup_sequence
+
+            load_config()
+            report = run_startup_sequence(initialize_desktop=True)
             self.line_ready.emit("Loading settings...")
             from core.config import load_settings
 
             load_settings()
-            self.line_ready.emit("Checking Chroma...")
-            from core.chroma import get_chroma_path
+            lines = list(report.diagnostic_lines)
+            if not lines:
+                from core.diagnostics import run_startup_diagnostics
 
-            get_chroma_path()
-            self.line_ready.emit("Loading indexes...")
-            from core.diagnostics import run_startup_diagnostics
-
-            lines = run_startup_diagnostics()
+                lines = run_startup_diagnostics()
             for line in lines:
                 self.line_ready.emit(line)
         except Exception as exc:
@@ -162,6 +165,21 @@ def run_index_code(project_path: str) -> tuple[int, int]:
     return build_code_index(project_path)
 
 
+def list_desktop_plugin_summary() -> list[dict[str, str | bool]]:
+    """Expose loaded/enabled plugins for desktop settings (no UI redesign)."""
+    from plugins.manager import list_plugin_status
+
+    return [
+        {
+            "id": row.plugin_id,
+            "name": row.name,
+            "enabled": row.enabled,
+            "health": row.health,
+        }
+        for row in list_plugin_status()
+    ]
+
+
 def run_doctor_report():
     from core.doctor import run_doctor
 
@@ -172,3 +190,24 @@ def run_project_analysis_text(query: str) -> tuple[bool, str]:
     from agents.analyzer import run_project_analysis
 
     return run_project_analysis(query)
+
+
+def get_autonomous_task_status() -> str:
+    """Status line for UI/voice: current task, progress, or idle."""
+    from agents.tasks.task_manager import get_progress_tracker
+
+    tracker = get_progress_tracker()
+    progress = tracker.snapshot()
+    if progress.idle:
+        return "Idle"
+    return f"{tracker.current_title or 'Working'} ({progress.completed}/{progress.total})"
+
+
+def connect_autonomous_progress(callback) -> None:
+    """Subscribe desktop WorkerSignals.progress to autonomous task events."""
+    from agents.tasks.progress import ProgressEvent, subscribe_progress
+
+    def _relay(event: ProgressEvent) -> None:
+        callback(event.message)
+
+    subscribe_progress(_relay)

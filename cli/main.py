@@ -9,13 +9,20 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import atexit
 import typer
 
 from core.diagnostics import print_startup_diagnostics
 from core.doctor import print_doctor_report, run_doctor
 from core.logging_config import configure_logging
 
+from deployment.config import load_config
+from deployment.shutdown import run_shutdown_sequence
+
+load_config()
 configure_logging()
+
+atexit.register(run_shutdown_sequence)
 
 _CLI_EPILOG = """
 Examples:
@@ -61,10 +68,15 @@ def _run_chat_loop() -> None:
     """Run the interactive chat session until the user exits."""
     from brain.model import ModelLoadError, generate_response
     from brain.pipeline import _prepare_chat_session
+    from deployment.startup import run_startup_sequence
 
     _print_welcome()
     _prepare_chat_session()
-    print_startup_diagnostics()
+    report = run_startup_sequence()
+    for line in report.diagnostic_lines:
+        print(line)
+    if not report.diagnostic_lines:
+        print_startup_diagnostics()
     print()
 
     while True:
@@ -178,6 +190,72 @@ def ingest() -> None:
     print("Done.")
     print()
     print("--------------------------------")
+
+
+plugins_app = typer.Typer(help="Manage Zoe extension plugins.")
+app.add_typer(plugins_app, name="plugins")
+
+
+@plugins_app.callback(invoke_without_command=True)
+def plugins_default(ctx: typer.Context) -> None:
+    """List installed plugins (same as plugins list)."""
+    if ctx.invoked_subcommand is not None:
+        return
+    _plugins_list()
+
+
+def _plugins_list() -> None:
+    from plugins.manager import get_plugin_manager
+
+    rows = get_plugin_manager().list_installed()
+    if not rows:
+        print("No plugins installed.")
+        return
+    for row in rows:
+        status = "enabled" if row.enabled else "disabled"
+        loaded = "loaded" if row.loaded else "not loaded"
+        print(f"{row.plugin_id}  {row.name} v{row.version}  [{row.kind}] {status}, {loaded}")
+        for err in row.errors:
+            print(f"  ! {err}")
+
+
+@plugins_app.command("list")
+def plugins_list_cmd() -> None:
+    """List installed plugins."""
+    _plugins_list()
+
+
+@plugins_app.command("enable")
+def plugins_enable(plugin_id: str = typer.Argument(..., help="Plugin id (e.g. ext.clock or clock)")) -> None:
+    from plugins.manager import get_plugin_manager
+
+    if get_plugin_manager().enable(plugin_id):
+        print(f"Enabled {plugin_id}")
+    else:
+        print(f"Could not enable {plugin_id}")
+        raise typer.Exit(code=1)
+
+
+@plugins_app.command("disable")
+def plugins_disable(plugin_id: str = typer.Argument(..., help="Plugin id")) -> None:
+    from plugins.manager import get_plugin_manager
+
+    if get_plugin_manager().disable(plugin_id):
+        print(f"Disabled {plugin_id}")
+    else:
+        print(f"Could not disable {plugin_id}")
+        raise typer.Exit(code=1)
+
+
+@plugins_app.command("reload")
+def plugins_reload(plugin_id: str = typer.Argument(..., help="Plugin id")) -> None:
+    from plugins.manager import get_plugin_manager
+
+    if get_plugin_manager().reload(plugin_id):
+        print(f"Reloaded {plugin_id}")
+    else:
+        print(f"Could not reload {plugin_id}")
+        raise typer.Exit(code=1)
 
 
 history_app = typer.Typer(help="Manage persistent conversation history.")

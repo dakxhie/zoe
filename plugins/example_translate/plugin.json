@@ -1,0 +1,9 @@
+{
+  "id": "translate",
+  "name": "Translate Stub",
+  "version": "1.0",
+  "entry": "main.py",
+  "permissions": ["internet"],
+  "description": "Example translate tool stub (offline placeholder)",
+  "minimum_zoe_version": "2.10"
+}

@@ -11,7 +11,7 @@ _settings_cache: dict[str, str] | None = None
 _settings_mtime: float | None = None
 
 
-def load_settings() -> dict[str, str]:
+def _load_settings_txt() -> dict[str, str]:
     """Load key=value settings from config/settings.txt."""
     global _settings_cache, _settings_mtime
 
@@ -39,3 +39,14 @@ def load_settings() -> dict[str, str]:
     _settings_cache = dict(settings)
     _settings_mtime = current_mtime
     return dict(settings)
+
+
+def load_settings() -> dict[str, str]:
+    """Load settings with deployment overlay (legacy settings.txt remains supported)."""
+    legacy = _load_settings_txt()
+    try:
+        from deployment.config import get_effective_settings
+
+        return get_effective_settings(legacy)
+    except Exception:
+        return legacy

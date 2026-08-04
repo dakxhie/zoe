@@ -134,6 +134,11 @@ class VoiceManager(QObject):
         self._set_state(VoiceState.IDLE)
 
     def start_listening(self) -> None:
+        from plugins.events import Event, emit
+        from plugins.plugin_api import run_voice_hooks
+
+        emit(Event.VOICE_STARTED, {})
+        run_voice_hooks("before_stt", {})
         if not self.settings.enabled:
             self.error_occurred.emit("Voice is disabled in settings.")
             return
@@ -211,8 +216,16 @@ class VoiceManager(QObject):
             self._set_state(VoiceState.IDLE)
             return
 
-        self.transcript_ready.emit(result.text, result.confidence)
-        self._think(result.text)
+        from plugins.plugin_api import run_voice_hooks
+
+        hook_payload = run_voice_hooks(
+            "after_stt",
+            {"transcript": result.text, "confidence": result.confidence},
+        )
+        transcript = str(hook_payload.get("transcript", result.text))
+
+        self.transcript_ready.emit(transcript, result.confidence)
+        self._think(transcript)
 
     def _think(self, transcript: str) -> None:
         self._set_state(VoiceState.THINKING)
@@ -238,15 +251,22 @@ class VoiceManager(QObject):
         if self.state == VoiceState.MUTED:
             return
         from voice.deps import voice_tts_available
+        from plugins.plugin_api import run_voice_hooks
 
         if not voice_tts_available():
             self._set_state(VoiceState.IDLE)
             return
+        payload = run_voice_hooks("before_tts", {"text": text})
+        speech_text = str(payload.get("text", text))
         self._set_state(VoiceState.SPEAKING)
 
         def _run() -> None:
+            from plugins.events import Event, emit
+
             start = time.perf_counter()
-            self._speaker.speak(text)
+            self._speaker.speak(speech_text)
+            run_voice_hooks("after_tts", {"text": speech_text})
+            emit(Event.VOICE_FINISHED, {"text": speech_text})
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug("Speech duration %.2fs", time.perf_counter() - start)
             self._set_state(VoiceState.IDLE)

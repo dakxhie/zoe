@@ -2,6 +2,101 @@
 
 All notable changes to Zoe AI are documented here.
 
+## v2.11.0 — 2026-08-04 (Sprint 21 — Production Readiness & Deployment)
+
+### Added
+- **`deployment/`** package: unified config, startup/shutdown managers, health, diagnostics, resource monitor, benchmark, telemetry (local-only)
+- YAML profiles: `config/default.yaml`, `development.yaml`, `production.yaml`
+- Scripts: `install.py`, `benchmark.py`, `doctor.py`, `export_settings.py`, `import_settings.py`
+- Deployment profiles: developer, production, portable, testing
+- Health checks for memory DB, GPU, plugins, voice, tasks, supervisor, memory intelligence
+- Pytest: `test_health`, `test_startup`, `test_shutdown`, `test_configuration`, `test_resource_monitor`, `test_benchmark`, `test_telemetry`, `test_deployment_profiles` (not run)
+
+### Changed
+- `core/config.load_settings()` merges deployment config over legacy `settings.txt`
+- `core/logging_config` respects `ZOE_LOG_LEVEL` and deployment profile
+- CLI chat and desktop startup invoke `run_startup_sequence()`; pipeline records local telemetry
+
+## v2.10.0 — 2026-08-04 (Sprint 20 — Plugin & Extension Framework)
+
+### Added
+- **Manifest-based extensions** (`plugin.json` + `main.py`) with `PluginContext` stable API
+- `plugins/manifest.py`, `plugin_api.py`, `events.py`, `state.py`; `PluginManager` class
+- Example plugins: `example_clock`, `example_notes`, `example_translate` (disabled by default)
+- Event bus: startup, shutdown, conversation, memory, tools, voice, tasks, plugin lifecycle
+- Chat, memory, and voice hooks; per-plugin storage under `data/plugins/<id>/`
+- CLI: `plugins`, `plugins list`, `plugins enable|disable|reload`
+- Pytest modules: `test_plugin_loader`, `test_plugin_permissions`, `test_plugin_events`, `test_plugin_reload`, `test_plugin_api`, `test_plugin_storage`, `test_plugin_tools` (not run in sprint)
+
+### Changed
+- Tool router/executor **extends** routing with registered extension tools (builtins unchanged)
+- Chat pipeline applies chat hooks and emits conversation events; voice manager optional hook points
+- Memory saves emit `memory_saved` and run memory hooks (permission-gated registration)
+- Autonomous tasks emit `task_started` / `task_finished` plugin events
+
+## v2.9.0 — 2026-08-04 (Long-Term Memory Intelligence & Self-Learning)
+
+### Added
+- **`memory/intelligence/`** — importance scoring, forgetting, reinforcement, consolidation, profile builder, memory review
+- Memory types: semantic, procedural, preference, identity, project, episode, temporary
+- Chroma metadata: importance, confidence, frequency, category, last_used
+- Profile summaries for *What do you know about me?* and *What have you learned?*
+- Post-turn pipeline via `finalize_conversation_memory()` in orchestrator
+- Pytest: `test_memory_scoring.py`, `test_profile_builder.py`, `test_reinforcement.py`, `test_forgetting.py`, `test_consolidation.py` (not run in sprint)
+
+### Changed
+- `save_memory()` routes through the intelligence pipeline
+- `brain/pipeline.py` finalizes memory after each completed turn
+
+## v2.8.0 — 2026-08-04 (Sprint 18 — Tool Ecosystem & Plugin Framework)
+
+### Added
+- **Plugin framework** under `plugins/` (registry, loader, lifecycle, permissions, sandbox, manager)
+- Builtin plugins: memory, web, pdf, code, calculator, datetime (+ notes routing)
+- Discovery from `plugins/builtin`, `plugins/community`, `plugins/local` at startup (cached)
+- Dependency resolution, hot reload, health states (loaded, disabled, failed, missing dependency, crashed)
+- Supervisor permission gate (`supervisor_may_use_plugin`) for internet and other capabilities
+- Desktop helper `list_desktop_plugin_summary()`; startup diagnostics plugin count
+- Pytest modules: `test_plugin_registry.py`, `test_plugin_loader.py`, `test_plugin_permissions.py`, `test_plugin_lifecycle.py`, `test_plugin_routing.py` (not run in sprint)
+
+### Changed
+- `tools/router.py` and `tools/executor.py` route through plugin registry (vision/filesystem legacy fallback)
+- `agents/intent.py` DEBUG logs planner plugin candidates
+- Planner/supervisor discover tools dynamically instead of hardcoded lists
+
+## v2.7.0 — 2026-08-04 (Sprint 17 — Autonomous Task Engine)
+
+### Added
+- **Autonomous task engine** under `agents/tasks/` (queue, scheduler, executor, progress, planner)
+- Multi-step internal tasks with dependencies, retries, backoff, pause/resume, cancel
+- `run_autonomous_goal()` integrated in orchestrator for complex goals (bypasses simple chat/tools)
+- Progress events (`subscribe_progress`) for future desktop/voice UI; voice status command
+- Optional memory summary after successful autonomous runs
+- Pytest modules for task manager, queue, scheduler, dependencies, cancellation (not run in sprint)
+
+### Changed
+- `agents/supervisor.requires_autonomous_execution()` routes to task engine
+- `desktop/workers.py` helpers for autonomous status and progress relay
+
+## v2.6.0 — 2026-08-04 (Sprint 16 — Multi-Agent Intelligence)
+
+### Added
+- **Multi-agent architecture**: internal Supervisor plus Memory, Research, Coding, Reasoning, and Creative specialists
+- `agents/supervisor.py`, `agents/coordinator.py`, `agents/agent_result.py`, `agents/specialists/*`
+- Parallel specialist execution, confidence scores, conflict resolution, DEBUG supervisor logs
+- Pytest: `test_supervisor.py`, `test_specialists.py`, `test_parallel_agents.py`, `test_conflict_resolution.py`
+
+### Changed
+- `agents/orchestrator.py` extends (does not replace) planner/executor with supervisor cycle
+- Architecture and roadmap docs describe internal multi-agent flow
+
+## v2.5.1 — 2026-08-04
+
+### Changed
+- Pytest infrastructure: headless detection for Colab/CI, shared `qapp` fixture, GUI and optional-voice skips
+- Desktop and voice widget tests skip instead of aborting when no display or optional voice deps
+- Conversation history unit tests use isolated temp storage paths
+
 ## v2.5.0 — 2026-08-04
 
 ### Added

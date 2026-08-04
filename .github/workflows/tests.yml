@@ -25,4 +25,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run pytest
-        run: pytest tests/ -v
+        env:
+          CI: "true"
+          QT_LOGGING_RULES: "*.debug=false;qt.qpa.*=false"
+        run: pytest tests/ -q

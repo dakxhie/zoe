@@ -1,0 +1,9 @@
+{
+  "id": "clock",
+  "name": "Clock",
+  "version": "1.0",
+  "entry": "main.py",
+  "permissions": ["datetime"],
+  "description": "Example clock tool for Zoe extension framework",
+  "minimum_zoe_version": "2.10"
+}

@@ -20,6 +20,22 @@ from tools.router import extract_image_path
 logger = logging.getLogger(__name__)
 
 
+def finalize_conversation_memory(
+    user_prompt: str,
+    assistant_reply: str,
+    *,
+    route_hint: str = "",
+) -> None:
+    """
+    Run memory intelligence after a completed conversation turn.
+
+    Scoring → importance → consolidation → reinforcement → forget filter → store/review.
+    """
+    from memory.intelligence.memory_review import process_post_turn_memory
+
+    process_post_turn_memory(user_prompt, assistant_reply, route_hint=route_hint)
+
+
 @dataclass
 class OrchestratedTurn:
     """Result of agent orchestration for one chat turn."""
@@ -55,6 +71,22 @@ def _log_agent_debug(state: AgentState) -> None:
     )
 
 
+def _format_autonomous_reply(summary: "ExecutionSummary") -> str:
+    """Turn internal execution summary into one user-facing Zoe message."""
+    from agents.tasks.task import ExecutionSummary
+
+    if not summary.success:
+        return (
+            "I ran a multi-step analysis but some steps did not complete. "
+            f"Details:\n\n{summary.report[:4000]}"
+        )
+    intro = f"I finished **{summary.title}** in {summary.elapsed_seconds:.0f} seconds."
+    body = summary.report[:6000]
+    if summary.memory_saved:
+        intro += " I saved a short summary to memory."
+    return f"{intro}\n\n{body}"
+
+
 def orchestrate_chat_turn(prompt: str) -> OrchestratedTurn:
     """Run intent analysis, planning, execution, verification, and prompt building."""
     total_start = time.perf_counter()
@@ -64,6 +96,30 @@ def orchestrate_chat_turn(prompt: str) -> OrchestratedTurn:
     state.intent = analyze_intent(prompt)
     state.plan = create_plan(state.intent, prompt)
     state.timings.planner_ms = (time.perf_counter() - planner_start) * 1000
+
+    from agents.tasks.task_planner import should_autonomous_execute
+    from agents.tasks.task_manager import run_autonomous_goal
+
+    if should_autonomous_execute(prompt, intent_type=state.intent.type.value):
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Supervisor: this request requires autonomous execution")
+        autonomous = run_autonomous_goal(prompt, save_memory=True)
+        if autonomous is not None:
+            state.metadata["autonomous"] = {
+                "task_id": autonomous.task_id,
+                "success": autonomous.success,
+                "elapsed_seconds": autonomous.elapsed_seconds,
+            }
+            reply = _format_autonomous_reply(autonomous)
+            state.timings.total_ms = (time.perf_counter() - total_start) * 1000
+            _log_agent_debug(state)
+            return OrchestratedTurn(direct_reply=reply, state=state)
+
+    from agents.supervisor import append_supervisor_context, run_supervisor_cycle, should_use_supervisor
+
+    supervisor_brief = None
+    if should_use_supervisor(state.intent, prompt):
+        supervisor_brief = run_supervisor_cycle(prompt, state.intent, state)
 
     if state.intent.primary_route == "vision":
         image_path = extract_image_path(prompt)
@@ -91,6 +147,9 @@ def orchestrate_chat_turn(prompt: str) -> OrchestratedTurn:
     }:
         execute_agent_plan(state)
 
+    if supervisor_brief is not None:
+        append_supervisor_context(state, supervisor_brief)
+
     verification = verify_agent_state(state)
     if verification.needs_clarification and not state.analysis_context.strip() and not state.fused_context.strip():
         state.timings.total_ms = (time.perf_counter() - total_start) * 1000
@@ -115,6 +174,13 @@ def orchestrate_chat_turn(prompt: str) -> OrchestratedTurn:
             selected_route=state.intent.primary_route if state.intent else None,
             agent_context=fused,
         )
+    elif fused.strip() and state.metadata.get("supervisor"):
+        messages = _build_chat_messages(
+            prompt,
+            history,
+            selected_route=state.intent.primary_route if state.intent else None,
+            agent_context=fused,
+        )
     elif state.intent and state.intent.primary_route == "web":
         messages = _build_chat_messages(
             prompt,
@@ -133,6 +199,12 @@ def orchestrate_chat_turn(prompt: str) -> OrchestratedTurn:
             prompt,
             history,
             selected_route=state.intent.primary_route if state.intent else None,
+        )
+
+    if supervisor_brief and logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Supervisor merged response context (%s chars)",
+            len(state.fused_context),
         )
 
     state.timings.total_ms = (time.perf_counter() - total_start) * 1000

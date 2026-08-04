@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import atexit
 import logging
 import sys
 from pathlib import Path
@@ -14,6 +15,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QSplashScreen
 
 from core.logging_config import configure_logging
+from deployment.config import load_config
+from deployment.shutdown import run_shutdown_sequence
 from desktop.main_window import MainWindow
 from desktop.preferences import DesktopPreferences
 from desktop.theme import apply_theme
@@ -22,7 +25,9 @@ from desktop.workers import StartupWorker
 
 def main() -> int:
     """Launch Zoe Desktop."""
+    load_config()
     configure_logging()
+    atexit.register(run_shutdown_sequence)
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 
     app = QApplication(sys.argv)

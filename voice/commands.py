@@ -43,6 +43,11 @@ def try_voice_command(text: str) -> CommandResult:
     if not normalized:
         return CommandResult(handled=False)
 
+    if _match(normalized, ("what are you doing", "task status", "current task", "progress")):
+        from agents.tasks.task_manager import get_idle_status
+
+        return CommandResult(True, get_idle_status())
+
     if _match(normalized, ("open settings", "show settings")):
         return CommandResult(True, "Opening settings.", VoiceAction.OPEN_SETTINGS)
     if _match(normalized, ("clear chat", "clear conversation")):

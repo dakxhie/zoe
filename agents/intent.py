@@ -144,4 +144,15 @@ def analyze_intent(query: str) -> Intent:
         intent.required_tools,
         intent.confidence,
     )
+    try:
+        from plugins.manager import select_plugins_for_planner
+
+        matched = select_plugins_for_planner(query)
+        if matched and logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Planner plugin candidates: %s",
+                ", ".join(plugin.id for plugin in matched),
+            )
+    except Exception:
+        pass
     return intent

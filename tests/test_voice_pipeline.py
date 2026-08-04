@@ -7,6 +7,10 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+from tests.headless import skip_if_headless_gui
+
+skip_if_headless_gui()
+
 pytest.importorskip("PySide6")
 
 from voice.listener import CaptureResult
@@ -15,7 +19,8 @@ from voice.recognizer import RecognitionResult
 from voice.settings import VoiceSettings
 
 
-def test_capture_to_response_pipeline(qapp) -> None:
+@patch("voice.deps.voice_stt_available", return_value=True)
+def test_capture_to_response_pipeline(_mock_stt, qapp) -> None:
     settings = VoiceSettings(enabled=True, auto_speak=False)
     manager = VoiceManager(settings)
     manager.set_prepare_session(lambda: None)

@@ -61,7 +61,45 @@
 - Web deduplication and vision partial-result handling
 - Expanded pytest coverage
 
-## Next
+### Sprint 16 — Multi-Agent Intelligence (v2.6)
+- Supervisor agent with Memory, Research, Coding, Reasoning, and Creative specialists
+- Parallel execution, structured `AgentResult`, confidence merge, conflict resolution
+- Extends planner, executor, orchestrator (CLI, desktop, voice unchanged at surface)
+
+### Sprint 17 — Autonomous Task Engine (v2.7)
+- Internal task queue, dependency scheduler, parallel subtasks, retry/backoff
+- Project-analysis task graph (index → framework → architecture → quality → summarize)
+- Orchestrator bypass for simple queries; memory summary on success
+- Progress events for desktop/voice subscription
+
+### Sprint 18 — Tool Ecosystem & Plugin Framework (v2.8)
+- Central plugin registry with cached routing and priority-ordered matching
+- Builtin plugins for memory, web, pdf, code, notes, calculator, datetime
+- Drop-in discovery from `plugins/community` and `plugins/local`
+- Lifecycle (install, load, enable, disable, reload, unload, remove), permissions, sandbox hooks
+- Supervisor refuses unauthorized plugin actions; plugin failures do not crash Zoe
+
+### Long-Term Memory Intelligence (v2.9)
+- Importance scoring, reinforcement, consolidation, forgetting filters
+- Internal user profile builder; explicit profile replies in chat
+- Post-turn memory review integrated with orchestrator
+
+### Sprint 20 — Plugin & Extension Framework (v2.10)
+- Manifest extensions, PluginContext API, event bus, hooks, isolated storage
+- CLI plugin management; examples disabled by default; additive tool routing
+
+### Sprint 21 — Production Readiness & Deployment (v2.11)
+- Unified YAML + env configuration; startup/shutdown managers
+- Health monitor, resource snapshot API, local telemetry, benchmark suite
+- Export/import settings and plugin state (not memories or conversations)
+
+## Next (stabilization & release)
+
+- Stabilization and regression fixes
+- Full Colab regression suite
+- Model fine-tuning on curated dataset
+- Performance optimization
+- Package and deploy Zoe v2
 
 ### Sprint 10 — Teaching Mode
 - Lesson plans from notes and PDFs
@@ -84,11 +122,6 @@
 - Offline Whisper + pyttsx3 pipeline integrated with desktop
 
 ### Sprint 14 — Packaging and Deployment
-- Installable package metadata (`pyproject.toml`)
-- Reproducible environment presets
-- Local GPU and Colab presets
-
-### Sprint 13 — Quality and Observability
 - Expanded pytest coverage (web, vision, indexers)
 - Performance profiling for indexing and inference
 - Persistent conversation history (SQLite/JSON)

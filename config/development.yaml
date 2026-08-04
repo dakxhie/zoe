@@ -1,0 +1,22 @@
+zoe:
+  profile: developer
+  mode: local
+
+logging:
+  level: DEBUG
+  startup_verbose: true
+
+cache:
+  enabled: true
+
+telemetry:
+  enabled: true
+  local_only: true
+
+diagnostics:
+  rich: true
+
+startup:
+  verify_folders: true
+  initialize_plugins: true
+  initialize_agents: true

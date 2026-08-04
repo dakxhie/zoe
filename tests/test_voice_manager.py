@@ -7,20 +7,14 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+from tests.headless import skip_if_headless_gui
+
+skip_if_headless_gui()
+
 pytest.importorskip("PySide6")
 
 from voice.manager import VoiceManager, VoiceState
 from voice.settings import VoiceSettings
-
-
-@pytest.fixture
-def qapp():
-    from PySide6.QtWidgets import QApplication
-
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    return app
 
 
 def test_voice_manager_starts_idle(qapp) -> None:
@@ -38,8 +32,9 @@ def test_start_listening_disabled_emits_error(qapp) -> None:
     assert errors
 
 
+@patch("voice.deps.voice_capture_available", return_value=True)
 @patch("voice.manager._ListenThread")
-def test_toggle_push_to_talk_starts_listener(mock_thread, qapp) -> None:
+def test_toggle_push_to_talk_starts_listener(mock_thread, _mock_capture, qapp) -> None:
     settings = VoiceSettings(enabled=True)
     manager = VoiceManager(settings)
     instance = MagicMock()

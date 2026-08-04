@@ -8,6 +8,7 @@ from memory.detector import should_remember
 from memory.history import add_message, clear_history
 from memory.inference import infer_memory, is_personal_info_question, parse_personal_question
 from memory.store import save_memory
+from tests.conversation_fixtures import isolated_history  # noqa: F401
 
 INFERENCE_CASES: tuple[tuple[str, str, str], ...] = (
     (
@@ -126,7 +127,7 @@ def test_should_remember_behavior_is_unchanged() -> None:
     assert not should_remember("What is my favorite programming language?")
 
 
-def test_save_memory_uses_previous_assistant_context(monkeypatch) -> None:
+def test_save_memory_uses_previous_assistant_context(monkeypatch, isolated_history) -> None:
     """Save inferred memories using the previous assistant message in history."""
     clear_history()
     add_message("assistant", "What is your favorite programming language?")

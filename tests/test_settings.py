@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from desktop.preferences import DesktopPreferences
 
 
@@ -14,6 +16,7 @@ def test_preferences_defaults() -> None:
     assert prefs.default_notes_folder()
 
 
+@pytest.mark.gui
 def test_preferences_roundtrip(tmp_path, qapp) -> None:
     """Preferences persist values via QSettings."""
     from PySide6.QtCore import QSettings

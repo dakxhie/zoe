@@ -1,0 +1,9 @@
+{
+  "id": "notes",
+  "name": "Notes Helper",
+  "version": "1.0",
+  "entry": "main.py",
+  "permissions": ["notes"],
+  "description": "Example notes-oriented extension hook",
+  "minimum_zoe_version": "2.10"
+}

@@ -50,6 +50,46 @@ def _try_save_memory(text: str) -> bool:
         return False
 
 
+def _finalize_turn_memory(user_prompt: str, assistant_reply: str) -> None:
+    """Run post-turn memory intelligence (scoring, review, reinforcement)."""
+    try:
+        from agents.orchestrator import finalize_conversation_memory
+        from tools.router import route_query
+
+        finalize_conversation_memory(
+            user_prompt,
+            assistant_reply,
+            route_hint=route_query(user_prompt),
+        )
+    except Exception as exc:
+        logger.warning("Finalize turn memory failed: %s", exc)
+
+
+def _emit_conversation_finished(user_prompt: str, assistant_reply: str) -> None:
+    from plugins.events import Event, emit
+
+    emit(
+        Event.CONVERSATION_FINISHED,
+        {"user_message": user_prompt, "assistant_reply": assistant_reply},
+    )
+
+
+def _complete_turn(user_prompt: str, assistant_reply: str) -> str:
+    from plugins.plugin_api import apply_chat_hooks
+
+    reply = apply_chat_hooks(user_prompt, assistant_reply)
+    _record_exchange(user_prompt, reply)
+    _finalize_turn_memory(user_prompt, reply)
+    _emit_conversation_finished(user_prompt, reply)
+    try:
+        from deployment.telemetry import record_telemetry
+
+        record_telemetry("conversation", {"chars": len(reply)})
+    except Exception:
+        pass
+    return reply
+
+
 def generate_image_response(
     image_path: str,
     prompt: str = "",
@@ -97,15 +137,32 @@ def generate_image_response(
 
 def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
     """Generate an assistant reply for the given user prompt."""
+    from plugins.events import Event, emit
+    from plugins.manager import initialize_plugins
+
+    initialize_plugins()
+    emit(Event.CONVERSATION_STARTED, {"user_message": prompt})
+
+    try:
+        from memory.intelligence.memory_review import respond_to_profile_query
+
+        profile_reply = respond_to_profile_query(prompt)
+        if profile_reply is not None:
+            _record_exchange(prompt, profile_reply)
+            _emit_conversation_finished(prompt, profile_reply)
+            return profile_reply
+    except Exception as exc:
+        logger.debug("Profile query handling skipped: %s", exc)
+
     if _try_save_memory(prompt):
         reply = MEMORY_ACKNOWLEDGEMENT
         _record_exchange(prompt, reply)
+        _emit_conversation_finished(prompt, reply)
         return reply
 
     handled, tool_result = execute_tool(prompt)
     if handled:
-        _record_exchange(prompt, tool_result)
-        return tool_result
+        return _complete_turn(prompt, tool_result)
 
     from agents.orchestrator import orchestrate_chat_turn
 
@@ -117,12 +174,10 @@ def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
         return generate_image_response(image_path, prompt, max_new_tokens=max_new_tokens)
 
     if turn.direct_reply is not None:
-        _record_exchange(prompt, turn.direct_reply)
-        return turn.direct_reply
+        return _complete_turn(prompt, turn.direct_reply)
 
     if turn.empty_index_response is not None:
-        _record_exchange(prompt, turn.empty_index_response)
-        return turn.empty_index_response
+        return _complete_turn(prompt, turn.empty_index_response)
 
     if turn.messages is None:
         from tools.router import route_query
@@ -147,5 +202,4 @@ def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
         messages,
         max_new_tokens=max_new_tokens,
     )
-    _record_exchange(prompt, reply)
-    return reply
+    return _complete_turn(prompt, reply)

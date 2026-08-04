@@ -1,6 +1,6 @@
 # Zoe AI — Project Status
 
-**Version:** v2.5  
+**Version:** v2.11  
 **Last updated:** 2026-08-04  
 **Branch:** `main`
 
@@ -14,19 +14,22 @@ Zoe AI is a local-first personal assistant with tool-routed retrieval, web resea
 |-----------|--------|-------------|
 | Chat / LLM | ✅ Complete | `brain/pipeline.py` |
 | Notes RAG | ✅ Complete | `rag/retriever.py` |
-| Memory | ✅ Complete | `memory/store.py` |
+| Memory | ✅ Complete | `memory/store.py` + `memory/intelligence/` |
 | PDF | ✅ Complete | `pdf/retriever.py` |
 | Code | ✅ Complete | `codebase/retriever.py` |
 | Web | ✅ Complete | `web/retriever.py` |
 | Vision | ✅ Complete | `vision/pipeline.py` |
-| Tools | ✅ Complete | `tools/router.py` |
-| Agents | ✅ Complete | `agents/orchestrator.py` |
+| Tools | ✅ Complete | `tools/router.py` → `plugins/` |
+| Plugins | ✅ Complete | `plugins/manager.py` + manifest extensions |
+| Agents | ✅ Complete | `agents/orchestrator.py` + supervisor/specialists |
 | Doctor | ✅ Complete | `core/doctor.py` |
 | Conversation | ✅ Complete | `conversation/history.py` |
 | CLI | ✅ Complete | `cli/main.py` |
 | Desktop | ✅ Complete | `desktop/app.py` |
 | Voice | ✅ Complete | `voice/manager.py` |
 | Regression | ✅ Complete | `tests/regression.py` |
+| Autonomous tasks | ✅ Complete | `agents/tasks/task_manager.py` |
+| Deployment | ✅ Complete | `deployment/startup.py`, `deployment/health.py` |
 | CI | ✅ Partial | `.github/workflows/tests.yml` |
 
 ## v2 Integration (2026-07-28)
@@ -87,6 +90,31 @@ pytest tests/ -v
 | `docs/ROADMAP.md` | Completed and planned sprints |
 | `CHANGELOG.md` | Version history |
 | `PROJECT_AUDIT.md` | Historical Sprint 1.2 audit |
+
+## Multi-Agent subsystem (Sprint 16)
+
+| Component | Path |
+|-----------|------|
+| Supervisor | `agents/supervisor.py` |
+| Coordinator | `agents/coordinator.py` |
+| Specialists | `agents/specialists/` |
+| Result types | `agents/agent_result.py` |
+
+Entry point unchanged: `brain.pipeline.generate_response()` → `agents.orchestrator.orchestrate_chat_turn()`.
+
+## Autonomous tasks (Sprint 17)
+
+| Component | Path |
+|-----------|------|
+| Models | `agents/tasks/task.py` |
+| Planner | `agents/tasks/task_planner.py` |
+| Queue | `agents/tasks/task_queue.py` |
+| Scheduler | `agents/tasks/scheduler.py` |
+| Executor | `agents/tasks/task_executor.py` |
+| Manager | `agents/tasks/task_manager.py` |
+| Progress | `agents/tasks/progress.py` |
+
+Complex goals run as internal subtask graphs; results merge to one user-facing reply. Subscribe via `agents.tasks.subscribe_progress()` for desktop signals.
 
 ## Running regression tests
 

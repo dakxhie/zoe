@@ -4,9 +4,16 @@ from __future__ import annotations
 
 import importlib
 
+import pytest
+
+from tests.headless import is_headless_environment
+
 
 def test_desktop_app_module_imports() -> None:
     """Desktop entry module imports without starting Qt event loop."""
+    if is_headless_environment():
+        pytest.skip("Desktop GUI tests skipped on headless environment")
+
     module = importlib.import_module("desktop.app")
     assert hasattr(module, "main")
 
