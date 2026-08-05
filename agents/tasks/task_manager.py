@@ -282,6 +282,9 @@ def run_task(task: Task, *, save_memory: bool = True) -> ExecutionSummary:
 
 def _finalize_subtask(task: Task, subtask: SubTask, result: TaskResult) -> None:
     if result.success:
+        subtask.status = TaskStatus.COMPLETED
+        if result.summary:
+            subtask.result_summary = result.summary
         _global_tracker.completed += 1
         emit_progress(
             ProgressEvent(
@@ -292,6 +295,9 @@ def _finalize_subtask(task: Task, subtask: SubTask, result: TaskResult) -> None:
             )
         )
     else:
+        subtask.status = TaskStatus.FAILED
+        if result.detail:
+            subtask.error = result.detail
         _global_tracker.errors = _global_tracker.errors or []
         _global_tracker.errors.append(result.detail or result.summary)
         emit_progress(
