@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 import threading
 import time
+
+from agents.tasks.progress import (
     ProgressEvent,
     ProgressEventType,
     ProgressTracker,
