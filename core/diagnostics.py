@@ -63,14 +63,6 @@ def run_startup_diagnostics() -> list[str]:
     except Exception:
         lines.append("✓ Model unavailable")
 
-    try:
-        from plugins.manager import list_enabled_plugins, initialize_plugins
-
-        initialize_plugins()
-        lines.append(f"✓ Plugins ({len(list_enabled_plugins())} enabled)")
-    except Exception:
-        lines.append("✓ Plugins (0)")
-
     return lines
 
 

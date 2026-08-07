@@ -15,8 +15,6 @@ from plugins.manifest import load_manifest, validate_manifest
 from plugins.plugin import Plugin, PluginHealth
 from plugins.plugin_api import PluginContext
 from plugins.registry import ExtensionRecord, PluginRegistry, get_registry
-from plugins.sandbox import run_plugin_entry
-
 logger = logging.getLogger(__name__)
 
 BUILTIN_PACKAGE = "plugins.builtin"
@@ -134,16 +132,14 @@ def load_extension_plugin(extension_id: str) -> bool:
         return False
 
     try:
-        result = run_plugin_entry(
+        from plugins.permissions import normalize_permissions
+        from plugins.sandbox import run_sandboxed
+
+        run_sandboxed(
             manifest.qualified_id,
-            manifest.permissions,
+            normalize_permissions(manifest.permissions),
             lambda: register_fn(context),
         )
-        if result is None:
-            registry.unregister_extension(manifest.qualified_id)
-            record.health = PluginHealth.CRASHED
-            record.loaded = False
-            return False
     except Exception as exc:
         logger.error("Extension %s crashed during register: %s", manifest.qualified_id, exc)
         registry.unregister_extension(manifest.qualified_id)

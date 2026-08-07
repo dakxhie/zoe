@@ -70,12 +70,18 @@ def fuse_tool_outputs(outputs: list[ToolOutput], *, max_chars: int = MAX_FUSED_C
             continue
 
         key = _section_key(content)
+        heading = SECTION_HEADINGS.get(output.tool, f"## {output.tool.title()}")
         if key in seen:
-            logger.debug("Fusion skipped duplicate section from %s", output.tool)
+            logger.debug("Fusion skipped duplicate body from %s", output.tool)
+            # Preserve tool section ordering without repeating identical text.
+            if not any(section.startswith(heading) for section in sections):
+                stub = heading if heading.endswith("\n") else f"{heading}\n"
+                if len(stub) <= remaining:
+                    sections.append(stub.rstrip())
+                    remaining -= len(stub) + 2
             continue
         seen.add(key)
 
-        heading = SECTION_HEADINGS.get(output.tool, f"## {output.tool.title()}")
         section_body = _truncate(content, min(MAX_SECTION_CHARS, remaining))
         if not section_body:
             continue

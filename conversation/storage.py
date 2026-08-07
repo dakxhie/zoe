@@ -139,6 +139,7 @@ def read_json_file(path: Path) -> dict[str, object] | None:
 def write_json_file(path: Path, payload: dict[str, object]) -> None:
     """Write one JSON file."""
     ensure_history_dir()
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 

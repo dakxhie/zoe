@@ -66,12 +66,12 @@ def classify_memory_type(text: str) -> MemoryType:
     """Infer memory type from natural language."""
     normalized = normalize_text(text)
 
-    if matches_any(normalized, IDENTITY_PHRASES) or "my name" in normalized:
-        return MemoryType.IDENTITY
     if matches_any(normalized, PROJECT_PHRASES):
         return MemoryType.PROJECT
     if matches_any(normalized, PREFERENCE_PHRASES):
         return MemoryType.PREFERENCE
+    if matches_any(normalized, IDENTITY_PHRASES) or "my name" in normalized:
+        return MemoryType.IDENTITY
     if matches_any(normalized, PROCEDURAL_PHRASES):
         return MemoryType.PROCEDURAL
     if matches_any(normalized, EPISODE_PHRASES):

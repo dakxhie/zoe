@@ -39,7 +39,9 @@ def should_autonomous_execute(query: str, *, intent_type: str | None = None) -> 
 
     if is_project_analysis_query(query):
         return True
-    if intent_type in {"project_analysis", "multi_tool", "report_generation"}:
+    # multi_tool is handled by the agent planner (execute_agent_plan), not the
+    # autonomous task engine — keeping it here incorrectly bypasses planning.
+    if intent_type in {"project_analysis", "report_generation"}:
         return True
     return matches_any(normalized, AUTONOMOUS_PHRASES)
 

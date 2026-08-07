@@ -96,16 +96,30 @@ def _safe_call(name: str, check_fn: Callable[[], CheckResult]) -> CheckResult:
             name=name,
             status=CheckStatus.FAIL,
             details=[f"Unexpected error: {exc}"],
+            fixes=[f"Investigate {name} check failure: {exc}"],
         )
 
 
 def check_python() -> CheckResult:
     """Verify the Python runtime version."""
     version = sys.version_info
-    version_text = f"{version.major}.{version.minor}.{version.micro}"
+    # Prefer indexing so plain-tuple mocks (and sys.version_info) both work.
+    # Never assume .major exists — patched tests pass a bare tuple.
+    if isinstance(version, tuple) and len(version) >= 3:
+        major, minor, micro = int(version[0]), int(version[1]), int(version[2])
+    elif hasattr(version, "major") and hasattr(version, "minor") and hasattr(version, "micro"):
+        major, minor, micro = version.major, version.minor, version.micro
+    else:
+        return CheckResult(
+            name="Python",
+            status=CheckStatus.FAIL,
+            details=[f"Unsupported version object: {version!r}"],
+            fixes=["Use a standard Python 3.10+ runtime."],
+        )
+    version_text = f"{major}.{minor}.{micro}"
     details = [f"Python {version_text}"]
 
-    if (version.major, version.minor) >= MIN_PYTHON_VERSION:
+    if (major, minor) >= MIN_PYTHON_VERSION:
         return CheckResult("Python", CheckStatus.PASS, details=details)
 
     minimum = f"{MIN_PYTHON_VERSION[0]}.{MIN_PYTHON_VERSION[1]}"
@@ -818,6 +832,8 @@ def run_doctor() -> DoctorReport:
         result = _safe_call(name, check_fn)
         checks.append(result)
         fixes.extend(result.fixes)
+        if result.status == CheckStatus.FAIL and not result.fixes and result.details:
+            fixes.append(f"Fix {result.name}: {result.details[0]}")
 
     try:
         chroma_result, collections = check_chroma()
@@ -830,6 +846,8 @@ def run_doctor() -> DoctorReport:
         collections = []
     checks.append(chroma_result)
     fixes.extend(chroma_result.fixes)
+    if chroma_result.status == CheckStatus.FAIL and not chroma_result.fixes and chroma_result.details:
+        fixes.append(f"Fix {chroma_result.name}: {chroma_result.details[0]}")
 
     for check_fn in (
         check_memory,
@@ -848,6 +866,8 @@ def run_doctor() -> DoctorReport:
         result = _safe_call("Check", check_fn)
         checks.append(result)
         fixes.extend(result.fixes)
+        if result.status == CheckStatus.FAIL and not result.fixes and result.details:
+            fixes.append(f"Fix {result.name}: {result.details[0]}")
 
     try:
         runtime_result, runtime = check_runtime()

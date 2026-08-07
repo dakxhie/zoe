@@ -92,6 +92,17 @@ def _safe_zone(name: str) -> ZoneInfo | None:
         return None
 
 
+def is_location_datetime_query(query: str) -> bool:
+    """Return True when the user asked for time/date in a specific place or zone."""
+    normalized = query.strip()
+    return bool(
+        TIME_LOCATION_PATTERN.search(normalized)
+        or DATE_LOCATION_PATTERN.search(normalized)
+        or ABBREV_TIME_PATTERN.search(normalized)
+        or LOCATION_TIME_PATTERN.search(normalized)
+    )
+
+
 def extract_timezone_query(query: str) -> tuple[str, ZoneInfo] | None:
     """Extract a timezone and request kind ('time' or 'date') from a query."""
     normalized = query.strip()

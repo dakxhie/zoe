@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from core.text_utils import matches_any, normalize_text
-from tools.timezones import extract_timezone_query
+from tools.timezones import extract_timezone_query, is_location_datetime_query
 
 TIME_PHRASES: tuple[str, ...] = (
     "what time is it",
@@ -46,6 +46,9 @@ def get_datetime_response(query: str) -> str | None:
             return now.strftime(f"%A, %B %d, %Y ({label})")
 
         return now.strftime(f"%I:%M %p ({label})").lstrip("0")
+
+    if is_location_datetime_query(query):
+        return None
 
     normalized = normalize_text(query)
     now = datetime.now()

@@ -9,12 +9,9 @@ from dataclasses import dataclass
 from conversation.retriever import clear_history_index, index_message, search_history
 from conversation.session import current_session, reset_active_session
 from conversation.storage import (
-    CHAT_FILE,
-    SUMMARY_FILE,
     StoredMessage,
     chat_file_exists,
     delete_history_files,
-    file_size_bytes,
     load_all_messages,
     utc_timestamp,
 )
@@ -76,18 +73,22 @@ def append_message(role: str, text: str) -> StoredMessage:
     )
     append_jsonl(message)
 
-    messages = _cached_or_load_messages()
-    messages.append(message)
-    _cache_messages(messages)
+    global _recent_cache
+    if _recent_cache is None:
+        _cache_messages(load_all_messages())
+    else:
+        updated = _recent_cache.copy()
+        updated.append(message)
+        _cache_messages(updated)
 
     try:
         index_message(message)
     except Exception as exc:
         logger.warning("Conversation indexing failed: %s", exc)
 
-    if should_summarize(messages):
+    if should_summarize(_cached_or_load_messages()):
         try:
-            summarize_history(messages)
+            summarize_history(_cached_or_load_messages())
         except Exception as exc:
             logger.warning("Conversation summarization skipped: %s", exc)
 
@@ -145,11 +146,15 @@ def history_size() -> int:
 
 def conversation_statistics() -> ConversationStatistics:
     """Return aggregate statistics for conversation history."""
+    from conversation import storage
+
     messages = _cached_or_load_messages()
     content_chars = sum(len(message.content) for message in messages)
     summary_payload = load_summary() or {}
     summary_text = str(summary_payload.get("summary", ""))
-    database_size = file_size_bytes(CHAT_FILE) + file_size_bytes(SUMMARY_FILE)
+    database_size = storage.file_size_bytes(storage.CHAT_FILE) + storage.file_size_bytes(
+        storage.SUMMARY_FILE
+    )
 
     return ConversationStatistics(
         messages=len(messages),

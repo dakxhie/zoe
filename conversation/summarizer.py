@@ -5,17 +5,25 @@ from __future__ import annotations
 import logging
 import re
 
-from conversation.storage import (
-    SUMMARY_FILE,
-    StoredMessage,
-    read_json_file,
-    utc_timestamp,
-    write_json_file,
-)
+from conversation.storage import StoredMessage
 
 logger = logging.getLogger(__name__)
 
 SUMMARIZE_THRESHOLD = 40
+
+
+def load_model():
+    """Load the chat model (wrapper kept for callers/tests that patch this module)."""
+    from brain.generation import load_model as _load_model
+
+    return _load_model()
+
+
+def generate_text(*args, **kwargs):
+    """Generate text (wrapper kept for callers/tests that patch this module)."""
+    from brain.generation import generate_text as _generate_text
+
+    return _generate_text(*args, **kwargs)
 
 
 def should_summarize(messages: list[StoredMessage]) -> bool:
@@ -25,19 +33,23 @@ def should_summarize(messages: list[StoredMessage]) -> bool:
 
 def load_summary() -> dict[str, object] | None:
     """Load the persisted conversation summary."""
-    return read_json_file(SUMMARY_FILE)
+    from conversation import storage
+
+    return storage.read_json_file(storage.SUMMARY_FILE)
 
 
 def save_summary(session_id: str, summary_text: str, topics: list[str], facts: list[str]) -> None:
     """Persist the latest conversation summary."""
-    write_json_file(
-        SUMMARY_FILE,
+    from conversation import storage
+
+    storage.write_json_file(
+        storage.SUMMARY_FILE,
         {
             "session": session_id,
             "summary": summary_text,
             "topics": topics,
             "facts": facts,
-            "updated": utc_timestamp(),
+            "updated": storage.utc_timestamp(),
         },
     )
 
@@ -97,8 +109,6 @@ def summarize_history(messages: list[StoredMessage]) -> dict[str, object] | None
     """Summarize a long conversation using the local LLM."""
     if not should_summarize(messages):
         return None
-
-    from brain.generation import generate_text, load_model
 
     transcript = _format_messages_for_summary(messages)
     prompt_messages = [

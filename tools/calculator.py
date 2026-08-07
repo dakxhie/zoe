@@ -51,26 +51,8 @@ def _evaluate_node(node: ast.AST) -> float | int:
     raise CalculatorError("Unsupported expression")
 
 
-def is_calculator_request(query: str) -> bool:
-    """Return True when the query looks like a calculator expression."""
-    expression = query.strip()
-    if not expression:
-        return False
-
-    allowed_characters = set("0123456789+-*/().% ")
-    if not all(character in allowed_characters for character in expression):
-        return False
-
-    try:
-        calculate(expression)
-    except CalculatorError:
-        return False
-
-    return True
-
-
-def calculate(expression: str) -> str:
-    """Safely evaluate a basic arithmetic expression."""
+def _evaluate_expression(expression: str) -> str:
+    """Evaluate a pure arithmetic string (no natural-language prefixes)."""
     parsed = ast.parse(expression.strip(), mode="eval")
     result = _evaluate_node(parsed.body)
 
@@ -78,3 +60,52 @@ def calculate(expression: str) -> str:
         return str(int(result))
 
     return str(result)
+
+
+def _extract_calculator_expression(query: str) -> str | None:
+    """Pull a safe arithmetic substring from natural-language calculator requests."""
+    text = query.strip()
+    if not text:
+        return None
+
+    allowed_characters = set("0123456789+-*/().% ")
+    if all(character in allowed_characters for character in text):
+        try:
+            _evaluate_expression(text)
+        except CalculatorError:
+            return None
+        return text
+
+    lowered = text.lower()
+    prefixes = (
+        "what is ",
+        "what's ",
+        "whats ",
+        "calculate ",
+        "compute ",
+        "evaluate ",
+        "solve ",
+    )
+    for prefix in prefixes:
+        if lowered.startswith(prefix):
+            candidate = text[len(prefix) :].strip(" ?=:,")
+            if candidate and all(ch in allowed_characters for ch in candidate):
+                try:
+                    _evaluate_expression(candidate)
+                except CalculatorError:
+                    return None
+                return candidate
+    return None
+
+
+def is_calculator_request(query: str) -> bool:
+    """Return True when the query looks like a calculator expression."""
+    return _extract_calculator_expression(query) is not None
+
+
+def calculate(expression: str) -> str:
+    """Safely evaluate a basic arithmetic expression."""
+    extracted = _extract_calculator_expression(expression)
+    if extracted is None:
+        raise CalculatorError("Unsupported expression")
+    return _evaluate_expression(extracted)

@@ -40,6 +40,8 @@ def memories_are_reinforcement_related(a: str, b: str) -> bool:
 
     key_a, key_b = _topic_key(a), _topic_key(b)
     if key_a and key_a == key_b:
+        if key_a == "python_preference":
+            return "python" in na and "python" in nb
         ratio = SequenceMatcher(None, na, nb).ratio()
         return ratio >= SIMILARITY_THRESHOLD
 

@@ -7,8 +7,8 @@ import time
 import uuid
 from dataclasses import dataclass
 
+import agents.executor as agent_executor
 from agents.analyzer import run_project_analysis
-from agents.executor import execute_agent_plan
 from agents.intent import analyze_intent
 from agents.planner import create_plan
 from agents.state import AgentState, IntentType
@@ -97,10 +97,35 @@ def orchestrate_chat_turn(prompt: str) -> OrchestratedTurn:
     state.plan = create_plan(state.intent, prompt)
     state.timings.planner_ms = (time.perf_counter() - planner_start) * 1000
 
+    is_analysis, analysis_context = run_project_analysis(prompt)
+    state.analysis_context = analysis_context if is_analysis else ""
+
+    from agents.planner import is_project_analysis_query
     from agents.tasks.task_planner import should_autonomous_execute
     from agents.tasks.task_manager import run_autonomous_goal
 
-    if should_autonomous_execute(prompt, intent_type=state.intent.type.value):
+    # Agent planner / analysis path must own these intents. Autonomous execution
+    # must not short-circuit multi-tool plans or analysis context injection.
+    agent_plan_intents = {
+        IntentType.MULTI_TOOL,
+        IntentType.COMPARISON,
+        IntentType.SUMMARIZATION,
+        IntentType.REPORT_GENERATION,
+        IntentType.STEP_BY_STEP,
+        IntentType.COMPLEX_REASONING,
+        IntentType.PROJECT_ANALYSIS,
+    }
+    would_run_agent_plan = (
+        is_analysis
+        or is_project_analysis_query(prompt)
+        or len(state.intent.required_tools) > 1
+        or state.intent.type in agent_plan_intents
+    )
+
+    if (
+        should_autonomous_execute(prompt, intent_type=state.intent.type.value)
+        and not would_run_agent_plan
+    ):
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("Supervisor: this request requires autonomous execution")
         autonomous = run_autonomous_goal(prompt, save_memory=True)
@@ -126,9 +151,6 @@ def orchestrate_chat_turn(prompt: str) -> OrchestratedTurn:
         if image_path:
             return OrchestratedTurn(use_vision_path=image_path, state=state)
 
-    is_analysis, analysis_context = run_project_analysis(prompt)
-    state.analysis_context = analysis_context if is_analysis else ""
-
     if not is_analysis:
         empty_index_response = get_empty_index_response(prompt, state.intent.primary_route)
         if empty_index_response is not None and len(state.intent.required_tools) <= 1:
@@ -145,7 +167,7 @@ def orchestrate_chat_turn(prompt: str) -> OrchestratedTurn:
         IntentType.STEP_BY_STEP,
         IntentType.COMPLEX_REASONING,
     }:
-        execute_agent_plan(state)
+        agent_executor.execute_agent_plan(state)
 
     if supervisor_brief is not None:
         append_supervisor_context(state, supervisor_brief)

@@ -374,13 +374,15 @@ def _build_merged_context(
     if tool in {"chat", "web", "vision"}:
         return ""
 
-    empty_message = _empty_index_message(tool)
-    if empty_message is not None:
-        return empty_message
-
     results = _retrieve_for_tool(tool, user_prompt)
+    if not results:
+        empty_message = _empty_index_message(tool)
+        if empty_message is not None:
+            return empty_message
+        return ""
+
     heading = _heading_for_tool(tool)
-    if not heading or not results:
+    if not heading:
         return ""
 
     sections: list[str] = []
@@ -394,8 +396,6 @@ def _count_retrieved_chunks(user_prompt: str, selected_route: str | None = None)
     """Return the number of retrieved chunks for debug logging."""
     tool = selected_route or route_query(user_prompt)
     if tool in {"chat", "web", "vision"}:
-        return 0
-    if _empty_index_message(tool) is not None:
         return 0
     return len(_retrieve_for_tool(tool, user_prompt))
 

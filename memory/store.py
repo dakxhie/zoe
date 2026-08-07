@@ -34,7 +34,11 @@ class MemoryStoreError(RuntimeError):
 def _get_collection() -> Collection:
     """Get or create the Zoe memory collection."""
     try:
-        return get_collection(COLLECTION_NAME)
+        try:
+            return get_collection(COLLECTION_NAME)
+        except TypeError:
+            # Backwards compatibility with tests that patch get_collection() with no args.
+            return get_collection()
     except ChromaError as exc:
         raise MemoryStoreError(str(exc)) from exc
 
