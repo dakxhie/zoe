@@ -140,8 +140,8 @@ def run_task(task: Task, *, save_memory: bool = True) -> ExecutionSummary:
         from plugins.events import Event, emit
 
         emit(Event.TASK_STARTED, {"task_id": task.id, "title": task.title})
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("TASK_STARTED event skipped: %s", exc)
 
     results: list[TaskResult] = []
     failed = False
@@ -271,8 +271,8 @@ def run_task(task: Task, *, save_memory: bool = True) -> ExecutionSummary:
             Event.TASK_FINISHED,
             {"task_id": task.id, "success": success, "elapsed_seconds": elapsed},
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("TASK_FINISHED event skipped: %s", exc)
 
     emit_progress(
         ProgressEvent(ProgressEventType.QUEUE_IDLE, task_id="", message="Idle")

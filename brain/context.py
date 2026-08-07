@@ -1,16 +1,17 @@
-"""Context building and retrieval for Zoe AI chat."""
+"""Context building and retrieval for Zoe AI chat.
+
+Heavy retrievers (notes/memory/PDF/code) are imported lazily inside their
+call sites so importing this module does not pull Chroma/embedder stacks at
+startup. Runtime retrieval behavior is unchanged.
+"""
 
 from __future__ import annotations
 
 import logging
 import re
 
-from codebase.retriever import search_code
 from core.chroma import collection_count
 from core.index_status import EMPTY_INDEX_MESSAGES, TOOL_COLLECTIONS
-from memory.retriever import search_memories
-from pdf.retriever import search_documents
-from rag.retriever import search
 from tools.router import route_query
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,12 @@ CONVERSATION_HEADING = (
     "========================\n"
     "Conversation History\n"
     "========================"
+)
+
+# Compiled once: web context formatting is stable and parsed on every web turn.
+_WEB_SOURCE_PATTERN = re.compile(
+    r"Source:\n(.*?)\n\nURL:\n(.*?)(?:\n\nRetrieved:|\Z)",
+    re.DOTALL,
 )
 
 MAX_CONTEXT_CHARS = 6000
@@ -125,6 +132,8 @@ def get_empty_index_response(
 def _retrieve_notes(user_prompt: str, top_k: int = 3) -> list[dict[str, str]]:
     """Retrieve relevant personal notes from the RAG index."""
     try:
+        from rag.retriever import search
+
         return search(user_prompt, top_k=top_k)
     except Exception as exc:
         logger.warning("Notes retrieval failed: %s", exc)
@@ -134,6 +143,8 @@ def _retrieve_notes(user_prompt: str, top_k: int = 3) -> list[dict[str, str]]:
 def _retrieve_memories(user_prompt: str, top_k: int = 3) -> list[dict[str, str]]:
     """Retrieve relevant learned conversation memories."""
     try:
+        from memory.retriever import search_memories
+
         return search_memories(user_prompt, top_k=top_k)
     except Exception as exc:
         logger.warning("Memory retrieval failed: %s", exc)
@@ -143,6 +154,8 @@ def _retrieve_memories(user_prompt: str, top_k: int = 3) -> list[dict[str, str]]
 def _retrieve_documents(user_prompt: str, top_k: int = 5) -> list[dict[str, str | int]]:
     """Retrieve relevant PDF document chunks."""
     try:
+        from pdf.retriever import search_documents
+
         return search_documents(user_prompt, top_k=top_k)
     except Exception as exc:
         logger.warning("PDF retrieval failed: %s", exc)
@@ -152,6 +165,8 @@ def _retrieve_documents(user_prompt: str, top_k: int = 5) -> list[dict[str, str 
 def _retrieve_code(user_prompt: str, top_k: int = 5) -> list[dict[str, str]]:
     """Retrieve relevant indexed code chunks."""
     try:
+        from codebase.retriever import search_code
+
         return search_code(user_prompt, top_k=top_k)
     except Exception as exc:
         logger.warning("Code retrieval failed: %s", exc)
@@ -225,12 +240,8 @@ def _extract_web_sources(web_content: str) -> list[tuple[str, str]]:
     """Extract unique web source titles and URLs from formatted context."""
     sources: list[tuple[str, str]] = []
     seen_urls: set[str] = set()
-    pattern = re.compile(
-        r"Source:\n(.*?)\n\nURL:\n(.*?)(?:\n\nRetrieved:|\Z)",
-        re.DOTALL,
-    )
 
-    for match in pattern.finditer(web_content):
+    for match in _WEB_SOURCE_PATTERN.finditer(web_content):
         title = match.group(1).strip()
         url = match.group(2).strip()
         if not url or url in seen_urls:

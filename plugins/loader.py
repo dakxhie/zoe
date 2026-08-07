@@ -15,6 +15,7 @@ from plugins.manifest import load_manifest, validate_manifest
 from plugins.plugin import Plugin, PluginHealth
 from plugins.plugin_api import PluginContext
 from plugins.registry import ExtensionRecord, PluginRegistry, get_registry
+
 logger = logging.getLogger(__name__)
 
 BUILTIN_PACKAGE = "plugins.builtin"

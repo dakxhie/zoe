@@ -1,4 +1,9 @@
-"""Safe calculator using AST parsing."""
+"""Safe calculator using AST parsing.
+
+Natural-language prefixes (``what is``, ``calculate``, …) are stripped before
+evaluation so plugin routing and memory forgetting share one detector. Only a
+closed set of AST node types is evaluated — never ``eval``/``exec``.
+"""
 
 from __future__ import annotations
 

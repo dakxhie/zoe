@@ -14,11 +14,17 @@ EXPECTED_COMMANDS: frozenset[str] = frozenset(
 
 
 def command_names_from_typer_app(typer_app: object) -> list[str]:
-    """Return sorted top-level command names registered on a Typer application."""
+    """Return sorted top-level command names registered on a Typer application.
+
+    Typer may register undecorated function names with hyphens
+    (``freshly_added_command`` → ``freshly-added-command``). Doctor and tests
+    expect Python-style identifiers, so hyphens are normalized to underscores
+    here. Nested/explicit aliases keep their registered spelling via
+    ``nested_command_names``.
+    """
     import typer.main as typer_main
 
     group = typer_main.get_group(typer_app)
-    # Typer may expose function names with hyphens; export Python-style identifiers.
     return sorted(name.replace("-", "_") for name in group.commands.keys())
 
 

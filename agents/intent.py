@@ -153,6 +153,7 @@ def analyze_intent(query: str) -> Intent:
                 "Planner plugin candidates: %s",
                 ", ".join(plugin.id for plugin in matched),
             )
-    except Exception:
-        pass
+    except Exception as exc:
+        # Plugin discovery is optional for intent classification.
+        logger.debug("Planner plugin discovery skipped: %s", exc)
     return intent

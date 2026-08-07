@@ -1,6 +1,14 @@
-"""Informational startup diagnostics for Zoe AI."""
+"""Informational startup diagnostics for Zoe AI.
+
+Surfaces index and model availability without raising. Individual probes are
+isolated so one unavailable subsystem (e.g. missing Chroma) cannot blank the
+whole startup banner. Exactly five lines are returned — Memory, Notes, PDF,
+Code, Model — a contract relied on by CLI/desktop banners and tests.
+"""
 
 from __future__ import annotations
+
+import logging
 
 from core.chroma import ChromaError, collection_count, get_chroma_path
 from core.config import load_settings
@@ -10,6 +18,8 @@ from core.index_status import (
     COLLECTION_NOTES,
     COLLECTION_PDF,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _format_index_status(name: str, count: int) -> str:
@@ -40,27 +50,32 @@ def run_startup_diagnostics() -> list[str]:
 
     try:
         lines.append(_format_index_status("Memory", _memory_count()))
-    except Exception:
+    except Exception as exc:
+        logger.debug("Startup Memory probe failed: %s", exc)
         lines.append("✓ Memory (0)")
 
     try:
         lines.append(_format_index_status("Notes", collection_count(COLLECTION_NOTES)))
-    except Exception:
+    except Exception as exc:
+        logger.debug("Startup Notes probe failed: %s", exc)
         lines.append("✓ Notes (0)")
 
     try:
         lines.append(_format_index_status("PDF", collection_count(COLLECTION_PDF)))
-    except Exception:
+    except Exception as exc:
+        logger.debug("Startup PDF probe failed: %s", exc)
         lines.append("✓ PDF (0)")
 
     try:
         lines.append(_format_index_status("Code", collection_count(COLLECTION_CODE)))
-    except Exception:
+    except Exception as exc:
+        logger.debug("Startup Code probe failed: %s", exc)
         lines.append("✓ Code (0)")
 
     try:
         lines.append(_check_model_available())
-    except Exception:
+    except Exception as exc:
+        logger.debug("Startup Model probe failed: %s", exc)
         lines.append("✓ Model unavailable")
 
     return lines

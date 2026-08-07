@@ -85,8 +85,9 @@ def _complete_turn(user_prompt: str, assistant_reply: str) -> str:
         from deployment.telemetry import record_telemetry
 
         record_telemetry("conversation", {"chars": len(reply)})
-    except Exception:
-        pass
+    except Exception as exc:
+        # Telemetry must never interrupt a completed chat turn.
+        logger.debug("Conversation telemetry skipped: %s", exc)
     return reply
 
 

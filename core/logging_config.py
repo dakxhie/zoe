@@ -31,5 +31,7 @@ def _resolve_level() -> int:
         from deployment.config import get_config
 
         return get_config().logging_level()
-    except Exception:
+    except Exception as exc:
+        # Config may be unavailable during very early bootstrap.
+        logging.getLogger(__name__).debug("Log level from config unavailable: %s", exc)
         return logging.INFO

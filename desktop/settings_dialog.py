@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -21,6 +23,8 @@ from core.config import ROOT, SETTINGS_FILE, load_settings
 from desktop.preferences import DesktopPreferences
 from voice.audio import list_input_devices, list_output_devices
 from voice.settings import VoiceSettings
+
+logger = logging.getLogger(__name__)
 
 
 class SettingsDialog(QDialog):
@@ -113,8 +117,9 @@ class SettingsDialog(QDialog):
             if voice_tts_available():
                 for device in list_output_devices():
                     self.output_device.addItem(device.name, device.name)
-        except Exception:
-            pass
+        except Exception as exc:
+            # Optional TTS device enumeration — keep Default when unavailable.
+            logger.debug("Output device enumeration skipped: %s", exc)
         if self.voice_settings.output_device:
             index = self.output_device.findData(self.voice_settings.output_device)
             if index >= 0:

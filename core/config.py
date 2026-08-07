@@ -1,11 +1,20 @@
-"""Configuration loader for Zoe AI."""
+"""Configuration loader for Zoe AI.
+
+Keeps a mtime-aware cache of config/settings.txt so hot paths (routing,
+doctor, retrieval) do not re-parse the file on every call. Deployment
+overlays are applied when available; failures fall back to legacy settings
+so local/Colab runs stay usable without deployment.yaml.
+"""
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SETTINGS_FILE = ROOT / "config" / "settings.txt"
+
+logger = logging.getLogger(__name__)
 
 _settings_cache: dict[str, str] | None = None
 _settings_mtime: float | None = None
@@ -48,5 +57,7 @@ def load_settings() -> dict[str, str]:
         from deployment.config import get_effective_settings
 
         return get_effective_settings(legacy)
-    except Exception:
+    except Exception as exc:
+        # Overlay is optional; keep legacy settings so core chat still boots.
+        logger.debug("Deployment settings overlay unavailable: %s", exc)
         return legacy
