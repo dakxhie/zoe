@@ -238,9 +238,30 @@ def _count_unique_code_files(collection: Any) -> int:
     return len(unique_paths) if unique_paths else collection.count()
 
 
+def get_chroma_path() -> Path:
+    """Compatibility wrapper for callers/tests that patch core.doctor.get_chroma_path."""
+    from core.chroma import get_chroma_path as _get_chroma_path
+
+    return _get_chroma_path()
+
+
+def get_collection(name: str) -> Any:
+    """Compatibility wrapper for callers/tests that patch core.doctor.get_collection."""
+    from core.chroma import get_collection as _get_collection
+
+    return _get_collection(name)
+
+
+def list_collection_names() -> list[str]:
+    """Compatibility wrapper for callers/tests that patch core.doctor.list_collection_names."""
+    from core.chroma import list_collection_names as _list_collection_names
+
+    return _list_collection_names()
+
+
 def check_chroma() -> tuple[CheckResult, list[CollectionInfo]]:
     """Initialize Chroma and list collection counts."""
-    from core.chroma import ChromaError, get_chroma_path, get_collection, list_collection_names
+    from core.chroma import ChromaError
 
     collections: list[CollectionInfo] = []
 

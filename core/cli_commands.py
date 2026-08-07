@@ -18,7 +18,8 @@ def command_names_from_typer_app(typer_app: object) -> list[str]:
     import typer.main as typer_main
 
     group = typer_main.get_group(typer_app)
-    return sorted(group.commands.keys())
+    # Typer may expose function names with hyphens; export Python-style identifiers.
+    return sorted(name.replace("-", "_") for name in group.commands.keys())
 
 
 def nested_command_names(typer_app: object, group_name: str) -> list[str]:
