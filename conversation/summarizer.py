@@ -3,13 +3,69 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
+from pathlib import Path
 
 from conversation.storage import StoredMessage
 
 logger = logging.getLogger(__name__)
 
 SUMMARIZE_THRESHOLD = 40
+
+
+class _SummaryFileProxy(os.PathLike[str]):
+    """
+    Live summary-file path for export compatibility.
+
+    Resolves dynamically so monkeypatched temporary directories work, while
+    `conversation.summarizer.SUMMARY_FILE` remains a stable imported object
+    whose methods (e.g. exists()) reflect the path actually used by
+    save_summary / load_summary.
+    """
+
+    def _resolve(self) -> Path:
+        from conversation import storage
+
+        current = storage.__dict__.get("SUMMARY_FILE")
+        # Honor concrete Path monkeypatches on conversation.storage.SUMMARY_FILE.
+        if isinstance(current, Path):
+            return current
+        return storage.HISTORY_DIR / "summary.json"
+
+    def __fspath__(self) -> str:
+        return os.fspath(self._resolve())
+
+    def __getattr__(self, name: str):
+        return getattr(self._resolve(), name)
+
+    def __str__(self) -> str:
+        return str(self._resolve())
+
+    def __repr__(self) -> str:
+        return repr(self._resolve())
+
+    def __eq__(self, other: object) -> bool:
+        try:
+            return self._resolve() == other
+        except Exception:
+            return NotImplemented
+
+
+# Stable export: importers hold this proxy; resolution stays dynamic.
+SUMMARY_FILE = _SummaryFileProxy()
+
+
+def _install_summary_file_export() -> None:
+    """Share the live proxy via conversation.storage when still a static Path."""
+    from conversation import storage
+
+    current = storage.__dict__.get("SUMMARY_FILE")
+    if isinstance(current, Path) or current is None:
+        storage.SUMMARY_FILE = SUMMARY_FILE
+
+
+_install_summary_file_export()
 
 
 def load_model():
