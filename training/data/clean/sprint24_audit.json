@@ -1,0 +1,57 @@
+{
+  "sft_rows": 345,
+  "held_out_rows": 70,
+  "correction_rows": 40,
+  "categories": {
+    "general_conversation": 57,
+    "personality": 59,
+    "coding": 65,
+    "tool_routing": 35,
+    "error_handling": 25,
+    "agent_planning": 22,
+    "memory": 25,
+    "retrieval_rag": 25,
+    "project_analysis": 19,
+    "structured_output": 13
+  },
+  "personality_modes": {
+    "professional_neutral": 198,
+    "lightly_witty": 59,
+    "playful_sarcastic": 16,
+    "serious_no_humor": 72
+  },
+  "personality_mode_pct": {
+    "professional_neutral": 57.39,
+    "lightly_witty": 17.1,
+    "playful_sarcastic": 4.64,
+    "serious_no_humor": 20.87
+  },
+  "leakage": {
+    "shared_ids": [],
+    "shared_user_prompt_ids": [],
+    "ok": true
+  },
+  "duplicates": {
+    "duplicate_ids": [],
+    "exact_assistant_dup_pairs": [],
+    "exact_user_dup_pairs": []
+  },
+  "content_flags": {
+    "marvel_or_tony_hits": [],
+    "possible_tool_hallucination_claims": [],
+    "possible_secrets": [],
+    "unsolicited_current_date_claims": []
+  },
+  "correction_categories": {
+    "tool_routing": 4,
+    "error_handling": 5,
+    "personality": 11,
+    "retrieval_rag": 4,
+    "coding": 3,
+    "memory": 4,
+    "general_conversation": 5,
+    "agent_planning": 2,
+    "structured_output": 1,
+    "project_analysis": 1
+  }
+}

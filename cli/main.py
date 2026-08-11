@@ -151,8 +151,25 @@ def doctor() -> None:
 
 @app.command()
 def train() -> None:
-    """Placeholder for future fine-tuning support."""
-    print("Training will be added later.")
+    """Point to the experimental fine-tuning package (does not start training)."""
+    print("Zoe fine-tuning is experimental and acknowledgement-gated.")
+    print("This CLI command does NOT start training or download weights.")
+    print("Target: Google Colab + NVIDIA GPU + 4-bit QLoRA.")
+    print()
+    print("Prepare / validate (safe):")
+    print("  python -m training.scripts.prepare_dataset --pilot")
+    print("  python -m training.scripts.audit_dataset")
+    print("  python -m training.scripts.train_qlora --dry-check-config")
+    print()
+    print("Only when you intentionally train on Colab GPU:")
+    print(
+        "  python -m training.scripts.train_qlora "
+        "--config training/config/colab_qlora.yaml "
+        "--i-understand-this-starts-training"
+    )
+    print()
+    print("See docs/COLAB_FINE_TUNING_RUNBOOK.md")
+    print("See docs/FINAL_FINE_TUNING_READINESS.md")
 
 
 @app.command()

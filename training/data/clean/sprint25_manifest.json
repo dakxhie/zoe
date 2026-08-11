@@ -1,0 +1,216 @@
+{
+  "sprint": 25,
+  "trained": false,
+  "preserved_sprint23_path": "C:\\Users\\Admin\\zoe-ai\\training\\data\\clean\\sft_sprint23.jsonl",
+  "preserved_sprint23_count": 345,
+  "counts": {
+    "tanglish_train": 445,
+    "coding_train": 575,
+    "combined_clean": 1365,
+    "balanced_clean": 630,
+    "held_tanglish": 55,
+    "held_coding": 75,
+    "held_tanglish_coding": 25,
+    "held_tool_honesty": 25,
+    "held_total_new": 180
+  },
+  "composition": {
+    "legacy_s23": 345,
+    "tanglish_full_bank": 445,
+    "coding_full_bank": 575,
+    "combined_all": 1365,
+    "balanced_for_first_ft": 630,
+    "balanced_tracks": {
+      "legacy_s23": 345,
+      "tanglish": 115,
+      "elite_coding": 170
+    },
+    "balanced_pct": {
+      "legacy_s23": 54.76,
+      "tanglish": 18.25,
+      "elite_coding": 26.98
+    },
+    "recommended_training_file": "training/data/clean/sft_sprint25_balanced.jsonl",
+    "note": "Full banks preserved separately. Balanced file samples Tanglish/coding so legacy Zoe identity remains majority for the first Colab run."
+  },
+  "stats": {
+    "tanglish": {
+      "n": 445,
+      "categories": {
+        "general_conversation": 105,
+        "coding": 304,
+        "error_handling": 18,
+        "tool_routing": 5,
+        "personality": 13
+      },
+      "personality_modes": {
+        "professional_neutral": 354,
+        "lightly_witty": 33,
+        "serious_no_humor": 55,
+        "playful_sarcastic": 3
+      },
+      "personality_mode_pct": {
+        "professional_neutral": 79.55,
+        "lightly_witty": 7.42,
+        "serious_no_humor": 12.36,
+        "playful_sarcastic": 0.67
+      },
+      "tracks": {
+        "tanglish": 445
+      },
+      "track_pct": {
+        "tanglish": 100.0
+      }
+    },
+    "coding": {
+      "n": 575,
+      "categories": {
+        "coding": 334,
+        "error_handling": 181,
+        "structured_output": 20,
+        "tool_routing": 40
+      },
+      "personality_modes": {
+        "professional_neutral": 440,
+        "lightly_witty": 5,
+        "serious_no_humor": 130
+      },
+      "personality_mode_pct": {
+        "professional_neutral": 76.52,
+        "lightly_witty": 0.87,
+        "serious_no_humor": 22.61
+      },
+      "tracks": {
+        "elite_coding": 575
+      },
+      "track_pct": {
+        "elite_coding": 100.0
+      }
+    },
+    "combined": {
+      "n": 1365,
+      "categories": {
+        "general_conversation": 162,
+        "personality": 72,
+        "coding": 703,
+        "tool_routing": 80,
+        "error_handling": 224,
+        "agent_planning": 22,
+        "memory": 25,
+        "retrieval_rag": 25,
+        "project_analysis": 19,
+        "structured_output": 33
+      },
+      "personality_modes": {
+        "professional_neutral": 992,
+        "lightly_witty": 97,
+        "playful_sarcastic": 19,
+        "serious_no_humor": 257
+      },
+      "personality_mode_pct": {
+        "professional_neutral": 72.67,
+        "lightly_witty": 7.11,
+        "playful_sarcastic": 1.39,
+        "serious_no_humor": 18.83
+      },
+      "tracks": {
+        "legacy_s23": 345,
+        "tanglish": 445,
+        "elite_coding": 575
+      },
+      "track_pct": {
+        "legacy_s23": 25.27,
+        "tanglish": 32.6,
+        "elite_coding": 42.12
+      }
+    },
+    "balanced": {
+      "n": 630,
+      "categories": {
+        "general_conversation": 83,
+        "personality": 61,
+        "coding": 244,
+        "tool_routing": 51,
+        "error_handling": 80,
+        "agent_planning": 22,
+        "memory": 25,
+        "retrieval_rag": 25,
+        "project_analysis": 19,
+        "structured_output": 20
+      },
+      "personality_modes": {
+        "professional_neutral": 425,
+        "lightly_witty": 64,
+        "playful_sarcastic": 16,
+        "serious_no_humor": 125
+      },
+      "personality_mode_pct": {
+        "professional_neutral": 67.46,
+        "lightly_witty": 10.16,
+        "playful_sarcastic": 2.54,
+        "serious_no_humor": 19.84
+      },
+      "tracks": {
+        "legacy_s23": 345,
+        "tanglish": 115,
+        "elite_coding": 170
+      },
+      "track_pct": {
+        "legacy_s23": 54.76,
+        "tanglish": 18.25,
+        "elite_coding": 26.98
+      }
+    }
+  },
+  "validation": {
+    "tanglish": {
+      "ok": true,
+      "summary": "files=1 examples=445 errors=0 warnings=4",
+      "errors": 0
+    },
+    "coding": {
+      "ok": true,
+      "summary": "files=1 examples=575 errors=0 warnings=246",
+      "errors": 0
+    },
+    "combined": {
+      "ok": true,
+      "summary": "files=1 examples=1365 errors=0 warnings=250",
+      "errors": 0
+    },
+    "balanced": {
+      "ok": true,
+      "summary": "files=1 examples=630 errors=0 warnings=39",
+      "errors": 0
+    },
+    "held_tl": {
+      "ok": true,
+      "summary": "files=1 examples=55 errors=0 warnings=0",
+      "errors": 0
+    },
+    "held_cd": {
+      "ok": true,
+      "summary": "files=1 examples=75 errors=0 warnings=60",
+      "errors": 0
+    },
+    "held_mix": {
+      "ok": true,
+      "summary": "files=1 examples=25 errors=0 warnings=0",
+      "errors": 0
+    },
+    "held_tool": {
+      "ok": true,
+      "summary": "files=1 examples=25 errors=0 warnings=0",
+      "errors": 0
+    }
+  },
+  "leakage_errors": [],
+  "leakage_ok": true,
+  "notes": [
+    "sft_sprint23.jsonl was not overwritten",
+    "external Tanglish corpora were audited but not bulk-ingested",
+    "held-out sets must never be mixed into train",
+    "use sft_sprint25_balanced.jsonl for first Colab QLoRA",
+    "no adapter has been trained"
+  ]
+}

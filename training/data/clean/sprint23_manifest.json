@@ -1,0 +1,65 @@
+{
+  "sprint": 23,
+  "trained": false,
+  "counts": {
+    "sft_clean": 345,
+    "held_out_eval": 70,
+    "corrections": 40
+  },
+  "sft_stats": {
+    "n": 345,
+    "categories": {
+      "general_conversation": 57,
+      "personality": 59,
+      "coding": 65,
+      "tool_routing": 35,
+      "error_handling": 25,
+      "agent_planning": 22,
+      "memory": 25,
+      "retrieval_rag": 25,
+      "project_analysis": 19,
+      "structured_output": 13
+    },
+    "personality_modes": {
+      "professional_neutral": 198,
+      "lightly_witty": 59,
+      "playful_sarcastic": 16,
+      "serious_no_humor": 72
+    }
+  },
+  "held_out_stats": {
+    "n": 70,
+    "categories": {
+      "general_conversation": 7,
+      "personality": 17,
+      "tool_routing": 7,
+      "coding": 10,
+      "agent_planning": 5,
+      "memory": 4,
+      "retrieval_rag": 7,
+      "project_analysis": 4,
+      "structured_output": 3,
+      "error_handling": 6
+    },
+    "personality_modes": {
+      "professional_neutral": 39,
+      "lightly_witty": 8,
+      "serious_no_humor": 19,
+      "playful_sarcastic": 4
+    }
+  },
+  "validation": {
+    "sft_ok": true,
+    "sft_summary": "files=1 examples=345 errors=0 warnings=0",
+    "sft_errors": 0,
+    "held_out_ok": true,
+    "held_out_summary": "files=1 examples=70 errors=0 warnings=0",
+    "corrections_ok": true,
+    "corrections_summary": "files=1 examples=40 errors=0 warnings=0"
+  },
+  "notes": [
+    "held_out must never be mixed into train",
+    "metadata must never be fed to the model",
+    "no adapter has been trained"
+  ]
+}

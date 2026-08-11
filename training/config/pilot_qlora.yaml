@@ -1,0 +1,91 @@
+# Legacy alias for the first controlled QLoRA experiment.
+#
+# CANONICAL Colab GPU config is now:
+#   training/config/colab_qlora.yaml
+#
+# Prefer colab_qlora.yaml for all new Colab runs.
+# This file remains for Sprint 24 doc compatibility; hyperparameters match
+# the Colab canonical config except output_dir (sprint24_pilot).
+
+model:
+  name: Qwen/Qwen2.5-3B-Instruct
+  revision: null
+  trust_remote_code: false
+
+quantization:
+  load_in_4bit: true
+  bnb_4bit_compute_dtype: float16
+  bnb_4bit_quant_type: nf4
+  bnb_4bit_use_double_quant: true
+
+lora:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  bias: none
+  task_type: CAUSAL_LM
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+training:
+  output_dir: training/adapters/runs/sprint24_pilot
+  num_train_epochs: 1
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 8
+  learning_rate: 1.0e-4
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.05
+  logging_steps: 5
+  save_steps: 50
+  eval_steps: 50
+  save_total_limit: 2
+  bf16: false
+  fp16: true
+  gradient_checkpointing: true
+  max_seq_length: 2048
+  packing: false
+  seed: 42
+  report_to: none
+  evaluation_strategy: steps
+
+data:
+  train_path: training/data/train/sft_pilot.jsonl
+  validation_path: training/data/validation/sft_pilot.jsonl
+  held_out_eval_path: training/data/held_out_eval/eval_sprint23.jsonl
+  clean_source: training/data/clean/sft_sprint23.jsonl
+  held_out_ids_file: training/data/held_out_eval/held_out_ids.txt
+
+safety:
+  require_explicit_train_flag: true
+  require_cuda: true
+  require_4bit: true
+  allow_model_download_with_ack: true
+  never_mix_held_out: true
+  refuse_if_train_empty: true
+  refuse_on_held_out_overlap: true
+  refuse_overwrite_without_force: true
+
+evaluation:
+  max_new_tokens: 256
+  temperature: 0.7
+  top_p: 0.9
+  seed: 42
+  do_sample: true
+  system_prompt_source: dataset_messages
+  tools_available: false
+  rubric_version: colab_v1
+  comparison_protocol: docs/FINE_TUNING_COMPARISON_PROTOCOL.md
+  acceptance: docs/ADAPTER_ACCEPTANCE_CRITERIA.md
+
+experiment:
+  name: sprint24_controlled_pilot_alias
+  canonical_config: training/config/colab_qlora.yaml
+  platform: google_colab_gpu
+  not_final_adapter: true

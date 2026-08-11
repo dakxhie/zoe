@@ -1,0 +1,136 @@
+{
+  "sprint": 26,
+  "trained": false,
+  "preserved": {
+    "sft_sprint23.jsonl": 345,
+    "sft_sprint25_balanced.jsonl": 630
+  },
+  "counts": {
+    "sprint26_balanced": 786,
+    "held_out": 110,
+    "corrections": 51,
+    "from_s23": 345,
+    "from_s25_tanglish_deduped": 150,
+    "from_s25_coding_deduped": 200,
+    "sprint26_gap_fill": 92
+  },
+  "stats": {
+    "n": 786,
+    "personality_modes": {
+      "professional_neutral": 517,
+      "lightly_witty": 86,
+      "playful_sarcastic": 23,
+      "serious_no_humor": 160
+    },
+    "personality_mode_pct": {
+      "professional_neutral": 65.78,
+      "lightly_witty": 10.94,
+      "playful_sarcastic": 2.93,
+      "serious_no_humor": 20.36
+    },
+    "categories": {
+      "general_conversation": 127,
+      "personality": 83,
+      "coding": 333,
+      "tool_routing": 72,
+      "error_handling": 67,
+      "agent_planning": 22,
+      "memory": 25,
+      "retrieval_rag": 25,
+      "project_analysis": 19,
+      "structured_output": 13
+    },
+    "tracks": {
+      "legacy_s23": 344,
+      "tanglish": 190,
+      "elite_coding": 230,
+      "personality": 12,
+      "tool_honesty": 10
+    },
+    "track_pct": {
+      "legacy_s23": 43.77,
+      "tanglish": 24.17,
+      "elite_coding": 29.26,
+      "personality": 1.53,
+      "tool_honesty": 1.27
+    },
+    "sources": {
+      "sprint23_curated": 344,
+      "sprint25_tanglish_curated": 190,
+      "sprint25_coding_curated": 230,
+      "sprint26_curated": 22
+    }
+  },
+  "held_stats": {
+    "n": 110,
+    "personality_modes": {
+      "professional_neutral": 64,
+      "serious_no_humor": 34,
+      "lightly_witty": 8,
+      "playful_sarcastic": 4
+    },
+    "personality_mode_pct": {
+      "professional_neutral": 58.18,
+      "serious_no_humor": 30.91,
+      "lightly_witty": 7.27,
+      "playful_sarcastic": 3.64
+    },
+    "categories": {
+      "general_conversation": 42,
+      "coding": 34,
+      "tool_routing": 16,
+      "error_handling": 8,
+      "personality": 10
+    },
+    "tracks": {
+      "tanglish": 25,
+      "elite_coding": 30,
+      "legacy_or_unmarked": 40,
+      "tool_honesty": 15
+    },
+    "track_pct": {
+      "tanglish": 22.73,
+      "elite_coding": 27.27,
+      "legacy_or_unmarked": 36.36,
+      "tool_honesty": 13.64
+    },
+    "sources": {
+      "sprint25_tanglish_curated": 25,
+      "sprint25_coding_curated": 30,
+      "sprint26_held_out": 55
+    }
+  },
+  "quality": {
+    "exact_assistant_dup_groups_in_balanced": 0,
+    "coding_bank_assistant_dedupe_applied": true,
+    "tanglish_diversity_preference_non_coding": true
+  },
+  "validation": {
+    "balanced": {
+      "ok": true,
+      "summary": "files=1 examples=786 errors=0 warnings=0",
+      "errors": 0,
+      "warnings": 0
+    },
+    "held": {
+      "ok": true,
+      "summary": "files=1 examples=110 errors=0 warnings=0",
+      "errors": 0,
+      "warnings": 0
+    },
+    "corr": {
+      "ok": true,
+      "summary": "files=1 examples=51 errors=0 warnings=0",
+      "errors": 0,
+      "warnings": 0
+    }
+  },
+  "leakage_ok": true,
+  "leakage_errors": [],
+  "notes": [
+    "Sprint 23 and Sprint 25 balanced files were not overwritten",
+    "Sprint 26 prefers quality: deduped coding assistants, diversified Tanglish",
+    "External Tanglish corpora not bulk-ingested",
+    "Use sft_sprint26_balanced.jsonl for the final Colab QLoRA prepare step"
+  ]
+}

@@ -1,5 +1,9 @@
 # Zoe Personality
 
+> **Note:** For fine-tuning / Sprint 22+, the canonical personality specification is
+> [`docs/ZOE_PERSONALITY.md`](ZOE_PERSONALITY.md). This file remains historical aspirational notes
+> and is **not** loaded by the production runtime.
+
 ## Name
 Zoe
 

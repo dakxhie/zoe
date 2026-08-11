@@ -1,0 +1,43 @@
+# Optional dependencies for Zoe fine-tuning on Google Colab GPU (NOT for runtime)
+
+Install only when you intentionally prepare to train or evaluate adapters.
+Do not merge these into the default runtime install without a dedicated decision.
+
+## Colab install sequence (GPU runtime)
+
+1. Runtime → Change runtime type → **GPU** (T4 / L4 / A100).
+2. Confirm CUDA is visible (`torch.cuda.is_available()` must be True after torch install).
+3. Install training stack (example Colab cell):
+
+```python
+# Colab GPU — training deps only. Does not start training.
+# TRL floor must support SFTConfig(assistant_only_loss=True).
+%pip install -q "transformers>=4.46.0" "datasets>=2.18.0" "peft>=0.11.0" \
+  "trl>=0.15.0" "bitsandbytes>=0.43.0" "accelerate>=0.30.0" "pyyaml>=6.0" safetensors
+```
+
+4. Use the PyTorch build already provided by Colab CUDA images when possible.
+   If you reinstall torch, pick a **CUDA** wheel — CPU-only torch will fail the trainer.
+
+## Package list (minimum guidance)
+
+```
+torch                 # CUDA build required on Colab GPU
+transformers>=4.46.0
+datasets>=2.18.0
+peft>=0.11.0
+trl>=0.15.0           # required for assistant_only_loss in train_qlora.py
+bitsandbytes>=0.43.0
+accelerate>=0.30.0
+safetensors
+pyyaml>=6.0
+```
+
+Notes:
+
+- Versions are minimum guidance; pin exact versions before a scored / reproducible run.
+- Do **not** install `trl==0.9.x` — too old for `assistant_only_loss`.
+- `bitsandbytes` is **CUDA-oriented** and required for 4-bit QLoRA.
+- CPU fine-tuning is **not supported** for Zoe’s first controlled experiment.
+- Zoe’s main `requirements.txt` stays free of this training-only stack.
+- Full workflow: `docs/COLAB_FINE_TUNING_RUNBOOK.md`

@@ -26,6 +26,13 @@ models/
 *.pt
 *.pth
 
+# Fine-tuning artifacts (Sprint 22+)
+training/adapters/runs/
+training/adapters/eval_results*.json
+training/data/raw/*.jsonl
+training/data/train/*.jsonl
+training/data/validation/*.jsonl
+
 # Vector Databases
 chroma/
 faiss/

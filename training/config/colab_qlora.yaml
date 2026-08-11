@@ -1,0 +1,116 @@
+# CANONICAL first-experiment QLoRA config for Google Colab + NVIDIA GPU.
+#
+# Target: Google Colab · CUDA · 4-bit QLoRA · PEFT adapter-only
+# Base:   Qwen/Qwen2.5-3B-Instruct
+#
+# Training requires explicit acknowledgement (no silent downloads):
+#   python -m training.scripts.train_qlora \
+#     --config training/config/colab_qlora.yaml \
+#     --i-understand-this-starts-training
+#
+# Do NOT use local CPU for this experiment.
+# Do NOT ship the adapter without held-out eval + human KEEP decision.
+# Full procedure: docs/COLAB_FINE_TUNING_RUNBOOK.md
+
+model:
+  name: Qwen/Qwen2.5-3B-Instruct
+  revision: null  # pin a commit SHA when reproducing a scored run
+  trust_remote_code: false
+
+quantization:
+  load_in_4bit: true
+  bnb_4bit_compute_dtype: float16
+  bnb_4bit_quant_type: nf4
+  bnb_4bit_use_double_quant: true
+
+lora:
+  # Modest capacity for personality/behavior SFT (Sprint 26 balanced → prepare split).
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  bias: none
+  task_type: CAUSAL_LM
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+training:
+  # Explicit Colab output — refuse overwrite unless --force-overwrite-output
+  output_dir: training/adapters/runs/colab_qlora_pilot
+  # One epoch first: detect pipeline + personality signal without aggressive fit.
+  num_train_epochs: 1
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 8  # effective batch ~8
+  learning_rate: 1.0e-4           # conservative for first Colab QLoRA SFT
+  # Why these values (Qwen2.5-3B, Sprint 26 balanced ~786 clean → prepare split):
+  # - r=16 / alpha=32: enough style capacity, limited overfit risk on small N
+  # - 1 epoch: first-experiment stability over maximum fit
+  # - LR 1e-4: conservative vs aggressive 2e-4
+  # - accum 8: VRAM-friendly with usable effective batch
+  # - max_seq 2048: covers curated chats; packing=false avoids blending turns
+  # - 4-bit NF4 + double quant: standard QLoRA memory path for Colab GPUs
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.05
+  logging_steps: 5
+  save_steps: 50
+  eval_steps: 50
+  save_total_limit: 2
+  bf16: false
+  fp16: true
+  gradient_checkpointing: true
+  max_seq_length: 2048
+  packing: false
+  seed: 42
+  report_to: none
+  evaluation_strategy: steps
+
+data:
+  # Canonical clean SFT: Sprint 26 balanced → prepare_dataset --sprint26-balanced --pilot
+  # (train/validation JSONL are gitignored — regenerate on the Colab host)
+  train_path: training/data/train/sft_pilot.jsonl
+  validation_path: training/data/validation/sft_pilot.jsonl
+  held_out_eval_path: training/data/held_out_eval/eval_sprint26.jsonl
+  clean_source: training/data/clean/sft_sprint26_balanced.jsonl
+  held_out_ids_file: training/data/held_out_eval/held_out_ids.txt
+  sprint25_held_out_ids_file: training/data/held_out_eval/held_out_ids_sprint25.txt
+  sprint26_held_out_ids_file: training/data/held_out_eval/held_out_ids_sprint26.txt
+
+safety:
+  require_explicit_train_flag: true
+  require_cuda: true
+  require_4bit: true
+  # With ack, Colab may download base weights on first run (expected).
+  allow_model_download_with_ack: true
+  never_mix_held_out: true
+  refuse_if_train_empty: true
+  refuse_on_held_out_overlap: true
+  refuse_overwrite_without_force: true
+
+evaluation:
+  max_new_tokens: 256
+  temperature: 0.7
+  top_p: 0.9
+  seed: 42
+  do_sample: true
+  # Freeze these between base and adapter runs.
+  system_prompt_source: dataset_messages
+  tools_available: false  # offline generation eval; tool honesty scored from text
+  rubric_version: colab_v1
+  comparison_protocol: docs/FINE_TUNING_COMPARISON_PROTOCOL.md
+  acceptance: docs/ADAPTER_ACCEPTANCE_CRITERIA.md
+
+experiment:
+  name: colab_qlora_first_controlled
+  platform: google_colab_gpu
+  goal: pipeline_smoke_plus_personality_signal
+  not_final_adapter: true
+  chat_format_note: >
+    Training uses TRL messages + assistant_only_loss with the tokenizer chat template.
+    Eval and production also use tokenizer.apply_chat_template
+    (add_generation_prompt=True at inference).

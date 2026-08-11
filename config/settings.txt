@@ -7,3 +7,7 @@ MEMORY_DB=storage/chroma
 PDF_FOLDER=data/pdfs
 
 NOTES_FOLDER=data/notes
+
+# Optional PEFT adapter (OFF by default — leave disabled until held-out review passes)
+# ADAPTER_ENABLED=false
+# ADAPTER_PATH=training/adapters/runs/<run_id>
