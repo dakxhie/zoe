@@ -19,6 +19,7 @@ from training.evaluation.artifacts import (  # noqa: E402
     build_report_markdown,
     build_scores_payload,
     heuristic_flags,
+    verify_mode_artifacts,
 )
 
 
@@ -115,14 +116,21 @@ def main(argv: list[str] | None = None) -> int:
             build_report_markdown(scores, generations_path=gen_path),
             encoding="utf-8",
         )
+        ok, errors = verify_mode_artifacts(artifact_dir, mode=mode)
         print(f"Wrote {scores_path}")
         print(f"Wrote {report_path}")
+        if not ok:
+            print("VERIFY FAIL after rescore:")
+            for err in errors:
+                print(f"  - {err}")
+            return 1
         print(
             json.dumps(
                 {
                     "mode": mode,
                     "counts": scores.get("counts"),
                     "heuristic_flag_rates": scores.get("heuristic_flag_rates"),
+                    "verified": True,
                 },
                 indent=2,
             )

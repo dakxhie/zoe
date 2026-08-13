@@ -2,6 +2,8 @@
 
 Writes concrete Sprint 26 artifacts under training/evaluation/results/sprint26/
 (or --artifact-dir). Never invents human rubric scores.
+
+Success requires verified on-disk artifacts. No success banner without verification.
 """
 
 from __future__ import annotations
@@ -13,8 +15,13 @@ from pathlib import Path
 from typing import Any
 
 from training.evaluation.artifacts import (
-    default_sprint26_artifact_dir,
+    EXPECTED_SPRINT26_HELD_OUT_N,
+    ARTIFACT_SCHEMA_VERSION,
     generation_row,
+    prompt_messages_from_example,
+    required_artifact_paths,
+    resolve_artifact_dir,
+    verify_mode_artifacts,
     write_mode_artifacts,
 )
 from training.evaluation.metrics import (
@@ -37,7 +44,7 @@ class EvaluationPlan:
 
 
 def describe_plan(plan: EvaluationPlan) -> str:
-    artifact = plan.artifact_dir or "(default: training/evaluation/results/sprint26)"
+    artifact = plan.artifact_dir or "(auto: cwd or repo training/evaluation/results/sprint26)"
     lines = [
         "Zoe evaluation plan (not executed unless --execute + ack):",
         f"  config: {plan.config_path}",
@@ -52,6 +59,7 @@ def describe_plan(plan: EvaluationPlan) -> str:
         "  rule: held_out_eval must never have been used for training",
         "  tools_available during this offline generation eval: false",
         "  NOTE: dry plan writes NO baseline artifacts.",
+        "  NOTE: BASELINE MEASUREMENT COMPLETE prints only after artifact verification.",
     ]
     return "\n".join(lines)
 
@@ -81,16 +89,17 @@ def load_eval_examples(split_path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _messages_without_last_assistant(messages: list[dict[str, str]]) -> list[dict[str, str]]:
-    if messages and messages[-1].get("role") == "assistant":
-        return messages[:-1]
-    return list(messages)
-
-
-def _resolve_artifact_dir(plan: EvaluationPlan, repo_root: Path) -> Path:
-    if plan.artifact_dir is not None:
-        return plan.artifact_dir
-    return default_sprint26_artifact_dir(repo_root)
+def _resolve_config_path(config_path: Path, repo_root: Path) -> Path:
+    if config_path.is_absolute() and config_path.is_file():
+        return config_path.resolve()
+    cwd_candidate = (Path.cwd() / config_path).resolve()
+    if cwd_candidate.is_file():
+        return cwd_candidate
+    repo_candidate = (repo_root / config_path).resolve()
+    if repo_candidate.is_file():
+        return repo_candidate
+    # Fall back to absolute resolve for clearer errors.
+    return config_path.resolve()
 
 
 def run_evaluation(plan: EvaluationPlan) -> int:
@@ -98,34 +107,71 @@ def run_evaluation(plan: EvaluationPlan) -> int:
     from training.scripts import load_yaml_config
 
     repo_root = Path(__file__).resolve().parents[2]
-    cfg = load_yaml_config(plan.config_path)
+    cwd = Path.cwd().resolve()
+    print(f"[baseline] cwd={cwd}")
+    print(f"[baseline] repo_root_from_file={repo_root}")
+
+    config_path = _resolve_config_path(Path(plan.config_path), repo_root)
+    print(f"[baseline] config={config_path}")
+    if not config_path.is_file():
+        print(f"ERROR: config not found: {config_path}")
+        return 1
+
+    cfg = load_yaml_config(config_path)
     data = cfg.get("data", {})
     if plan.split == "held_out_eval":
         split_path = Path(data["held_out_eval_path"])
     else:
         split_path = Path(data["validation_path"])
 
-    # Resolve relative paths against repo root for Colab cwd safety.
     if not split_path.is_absolute():
-        split_path = (repo_root / split_path).resolve()
+        cwd_split = (cwd / split_path).resolve()
+        repo_split = (repo_root / split_path).resolve()
+        if cwd_split.exists():
+            split_path = cwd_split
+        elif repo_split.exists():
+            split_path = repo_split
+        else:
+            split_path = cwd_split
+    else:
+        split_path = split_path.resolve()
+
+    print(f"[baseline] resolved_eval_dataset={split_path}")
+    if not split_path.exists():
+        print(f"ERROR: evaluation dataset not found: {split_path}")
+        return 1
+
+    if plan.split == "held_out_eval" and split_path.name != "eval_sprint26.jsonl":
+        print(
+            "ERROR: canonical Sprint 26 baseline requires "
+            f"eval_sprint26.jsonl, got {split_path.name}"
+        )
+        return 1
 
     examples = load_eval_examples(split_path)
+    print(f"[baseline] examples_loaded={len(examples)}")
     if not examples:
-        print(f"No eval examples found under {split_path}")
+        print(f"ERROR: No eval examples found under {split_path}")
+        return 1
+    if plan.split == "held_out_eval" and len(examples) != EXPECTED_SPRINT26_HELD_OUT_N:
+        print(
+            "ERROR: Sprint 26 held-out size mismatch: "
+            f"expected {EXPECTED_SPRINT26_HELD_OUT_N}, got {len(examples)}"
+        )
         return 1
 
     try:
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
     except ImportError as exc:
-        print(f"Missing eval dependencies: {exc}")
+        print(f"ERROR: Missing eval dependencies: {exc}")
         return 1
 
     if "adapter" in plan.modes:
         try:
             from peft import PeftModel  # noqa: F401
         except ImportError as exc:
-            print(f"Missing peft for adapter mode: {exc}")
+            print(f"ERROR: Missing peft for adapter mode: {exc}")
             return 1
 
     model_name = cfg["model"]["name"]
@@ -133,13 +179,27 @@ def run_evaluation(plan: EvaluationPlan) -> int:
     gen_cfg = cfg.get("evaluation", {})
     seed = int(gen_cfg.get("seed", cfg.get("training", {}).get("seed", 42)))
     set_seed(seed)
+    print(f"[baseline] model_identifier={model_name}")
+    print(f"[baseline] model_revision={model_revision}")
+    print(f"[baseline] generation_seed={seed}")
 
     tok_kwargs: dict[str, Any] = {}
     if model_revision:
         tok_kwargs["revision"] = model_revision
     tokenizer = AutoTokenizer.from_pretrained(model_name, **tok_kwargs)
 
-    artifact_dir = _resolve_artifact_dir(plan, repo_root)
+    artifact_dir = resolve_artifact_dir(
+        plan.artifact_dir,
+        repo_root=repo_root,
+        cwd=cwd,
+    )
+    print(f"[baseline] artifact_dir={artifact_dir}")
+    for mode in plan.modes:
+        expected = required_artifact_paths(artifact_dir, mode=mode)
+        print(f"[baseline] expected_{mode}_artifacts=")
+        for kind, path in expected.items():
+            print(f"    {kind}: {path}")
+
     run_meta = {
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "model_name": model_name,
@@ -159,7 +219,9 @@ def run_evaluation(plan: EvaluationPlan) -> int:
         "modes": plan.modes,
         "adapter_path": str(plan.adapter_path) if plan.adapter_path else None,
         "artifact_dir": str(artifact_dir).replace("\\", "/"),
-        "schema_version": "zoe_eval_artifacts_v1",
+        "cwd": str(cwd).replace("\\", "/"),
+        "repo_root_from_file": str(repo_root).replace("\\", "/"),
+        "schema_version": ARTIFACT_SCHEMA_VERSION,
         "note": (
             "Human rubric scoring still required for personality/quality. "
             "Automated fields are heuristics only — not invented rubric averages."
@@ -169,14 +231,14 @@ def run_evaluation(plan: EvaluationPlan) -> int:
     results: list[dict[str, Any]] = []
     for mode in plan.modes:
         if mode == "adapter" and plan.adapter_path is None:
-            print("adapter mode requested but --adapter-path missing")
+            print("ERROR: adapter mode requested but --adapter-path missing")
             return 1
         if mode == "adapter":
             from peft import PeftModel
         else:
             PeftModel = None  # type: ignore[assignment]
 
-        print(f"Loading mode={mode} ...")
+        print(f"[baseline] generation_start mode={mode}")
         dtype = torch.float16 if torch.cuda.is_available() else torch.float32
         model_kwargs: dict[str, Any] = {
             "dtype": dtype,
@@ -196,12 +258,12 @@ def run_evaluation(plan: EvaluationPlan) -> int:
                 model = model.to("cpu")
         model.eval()
 
-        for ex in examples:
+        for idx, ex in enumerate(examples, start=1):
             error: str | None = None
             text = ""
             auto_metrics: dict[str, Any] = {}
             try:
-                messages = _messages_without_last_assistant(ex["messages"])
+                messages = prompt_messages_from_example(ex)
                 prompt = tokenizer.apply_chat_template(
                     messages,
                     tokenize=False,
@@ -234,6 +296,7 @@ def run_evaluation(plan: EvaluationPlan) -> int:
                 error = f"{type(exc).__name__}: {exc}"
                 text = ""
                 auto_metrics = {}
+                print(f"[baseline] generation_error id={ex.get('id')} err={error}")
 
             results.append(
                 generation_row(
@@ -244,6 +307,22 @@ def run_evaluation(plan: EvaluationPlan) -> int:
                     auto_metrics=auto_metrics,
                 )
             )
+            if idx == 1 or idx == len(examples) or idx % 25 == 0:
+                print(f"[baseline] generation_progress mode={mode} {idx}/{len(examples)}")
+
+        ok_n = sum(1 for r in results if r.get("mode") == mode and r.get("ok"))
+        fail_n = sum(1 for r in results if r.get("mode") == mode and not r.get("ok"))
+        print(
+            f"[baseline] generation_complete mode={mode} "
+            f"ok={ok_n} failed={fail_n} total={ok_n + fail_n}"
+        )
+        if ok_n < 1:
+            print(
+                f"ERROR: zero successful generations for mode={mode}; "
+                "refusing success."
+            )
+            # Still attempt to write diagnostic artifacts below only if we have rows.
+            # But overall exit will be non-zero.
 
         del model
         del base
@@ -251,19 +330,27 @@ def run_evaluation(plan: EvaluationPlan) -> int:
             torch.cuda.empty_cache()
 
     written: dict[str, dict[str, Path]] = {}
-    for mode in plan.modes:
-        written[mode] = write_mode_artifacts(
-            artifact_dir=artifact_dir,
-            mode=mode,
-            generations=results,
-            run_meta=run_meta,
-        )
+    try:
+        print(f"[baseline] artifact_writing_start dir={artifact_dir}")
+        for mode in plan.modes:
+            written[mode] = write_mode_artifacts(
+                artifact_dir=artifact_dir,
+                mode=mode,
+                generations=results,
+                run_meta=run_meta,
+            )
+            print(f"[baseline] artifact_writing_complete mode={mode}")
+            for kind, path in written[mode].items():
+                print(f"    wrote {kind}: {path}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"ERROR: artifact writing failed: {exc}")
+        return 1
 
     # Optional legacy combined dump (not the primary artifact).
     if plan.output_path is not None:
         legacy = plan.output_path
         if not legacy.is_absolute():
-            legacy = repo_root / legacy
+            legacy = (cwd / legacy).resolve()
         legacy.parent.mkdir(parents=True, exist_ok=True)
         payload = {"run_meta": run_meta, "results": results}
         legacy.write_text(
@@ -274,9 +361,31 @@ def run_evaluation(plan: EvaluationPlan) -> int:
             json.dumps(run_meta, indent=2) + "\n",
             encoding="utf-8",
         )
-        print(f"Wrote legacy combined JSON to {legacy}")
+        print(f"[baseline] wrote_legacy_combined_json={legacy}")
 
-    print("BASELINE EVALUATION ARTIFACTS WRITTEN" if plan.modes == ["base"] else "EVALUATION ARTIFACTS WRITTEN")
+    # Hard verification gate — never claim complete without files on disk.
+    all_ok = True
+    for mode in plan.modes:
+        ok, errors = verify_mode_artifacts(artifact_dir, mode=mode)
+        print(f"[baseline] artifact_verification mode={mode} ok={ok}")
+        if not ok:
+            all_ok = False
+            for err in errors:
+                print(f"  VERIFY FAIL: {err}")
+        mode_ok = sum(1 for r in results if r.get("mode") == mode and r.get("ok"))
+        if mode_ok < 1:
+            all_ok = False
+            print(f"  VERIFY FAIL: zero successful generations for mode={mode}")
+
+    if not all_ok:
+        print("BASELINE MEASUREMENT FAILED — required artifacts missing or invalid.")
+        print(f"Checked directory: {artifact_dir}")
+        return 1
+
+    if plan.modes == ["base"]:
+        print("BASELINE MEASUREMENT COMPLETE")
+    else:
+        print("EVALUATION MEASUREMENT COMPLETE")
     for mode, paths in written.items():
         print(f"  mode={mode}")
         for kind, path in paths.items():

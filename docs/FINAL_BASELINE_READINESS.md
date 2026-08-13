@@ -1,73 +1,91 @@
 # Final Baseline Readiness
 
-**Date:** 2026-08-13  
+**Date:** 2026-08-13 (updated — blocker fix)  
 **Scope:** Static audit + baseline/evaluation pipeline fix only  
 **Not done:** re-running baseline, tests, training, weight downloads, commits, pushes, production/runtime changes
 
 ---
 
-## Root cause
+## Exact root cause (blocker)
 
-`python training/scripts/evaluate_baseline.py` could look “successful” **without** leaving a usable Sprint 26 baseline because:
+The previous “success” could happen while Sprint 26 artifacts were missing because:
 
-1. **Dry-run default** — Without `--execute` **and** `--i-understand-this-loads-models`, the script printed a plan and exited `0`. **No files were written.**
-2. **Wrong / hidden output path** — Even on execute, the default dump was  
-   `training/adapters/runs/sprint24_pilot/eval_baseline.json`, which is:
-   - Sprint-24-named (stale)
-   - under `training/adapters/runs/` (**gitignored**)
-   - a single combined JSON, **not** generations JSONL + scores + report
-3. **No score/report artifacts** — Rubric slots were left `null` with no `baseline_scores.json` / `baseline_report.md`, so inspection only found docs and scripts.
-4. **No clear “artifacts written” contract** — Success messaging did not require the Sprint 26 result directory.
+1. **Success was not gated on on-disk verification** — the runner printed a success banner after calling the writer without re-checking that  
+   `baseline_generations.jsonl`, `baseline_scores.json`, and `baseline_report.md` exist, are non-empty, and parse.
+2. **Artifact directory could diverge from the tree being inspected** — defaults were derived from `__file__` (package location). On Colab / Drive / multi-checkout setups, that path can differ from `Path.cwd()` where the operator looks for  
+   `training/evaluation/results/sprint26/`.
+3. **No hard fail if generation produced zero usable responses** — per-example exceptions were swallowed into empty responses; the run could still exit 0 after writing weak/empty-feeling outputs (or appear complete while the operator checked the wrong absolute path).
+4. **Misleading completeness messaging** — dry-run or unverified paths could be confused with a finished baseline. The string `BASELINE MEASUREMENT COMPLETE` must only appear after verification.
 
-Calling the script without the ack flags therefore cannot produce baseline scores; an executed run could still bury output where it was easy to miss.
+Note: the repo previously printed `BASELINE EVALUATION ARTIFACTS WRITTEN` without verification. That contract was insufficient for the Colab gate.
 
 ---
 
-## Exact fix
+## Exact files changed
 
-| Change | Purpose |
-|--------|---------|
-| `training/evaluation/artifacts.py` | Shared writer for generations JSONL, scores JSON, markdown report (`zoe_eval_artifacts_v1`) |
-| `training/evaluation/runner.py` | Per-example success/failure; write Sprint 26 artifacts; prefer `eval_sprint26.jsonl`; optional legacy dump only if `--output` |
-| `training/scripts/evaluate_baseline.py` | Default `--artifact-dir` → `training/evaluation/results/sprint26/`; dry-run prints **NO ARTIFACTS WERE WRITTEN** + exact re-run command |
-| `training/scripts/score_generations.py` | Rebuild scores/report from generations JSONL without loading models |
-| `training/evaluation/results/README.md` | Documents expected files |
-| `docs/COLAB_FINE_TUNING_RUNBOOK.md` | Points Phase 3/5 at new artifact paths |
+| File | Change |
+|------|--------|
+| `training/evaluation/artifacts.py` | cwd-aware `resolve_artifact_dir`; `verify_mode_artifacts`; refuse empty writes; store `prompt_messages` + full `metadata` in JSONL |
+| `training/evaluation/runner.py` | Strong logging; require `eval_sprint26.jsonl` with 110 rows; write+verify; non-zero on failure; print `BASELINE MEASUREMENT COMPLETE` only after verify |
+| `training/scripts/evaluate_baseline.py` | Resolve artifact dir via cwd/repo; never print COMPLETE itself; dry-run clarifies no artifacts |
+| `docs/FINAL_BASELINE_READINESS.md` | This update |
 
-**Not changed:** production Zoe (`brain/`, runtime defaults), training data, QLoRA trainer safety gates, adapter-off-by-default.
-
-**Scores policy:** No invented rubric averages. Human 1–5 dimensions and overall score are marked `unavailable` with reasons. Only generation counts + offline heuristics (empty, tool-claim regex, humor-in-serious, etc.) are filled.
+**Training / QLoRA code:** not touched.  
+**Production Zoe runtime:** not touched.  
+**Held-out / train datasets:** not modified.
 
 ---
 
-## Files modified / added
+## Corrected execution flow
 
-- `training/evaluation/artifacts.py` *(new)*
-- `training/evaluation/runner.py`
-- `training/evaluation/__init__.py`
-- `training/evaluation/results/README.md` *(new)*
-- `training/scripts/evaluate_baseline.py`
-- `training/scripts/score_generations.py`
-- `docs/COLAB_FINE_TUNING_RUNBOOK.md`
-- `docs/FINAL_BASELINE_READINESS.md` *(this file)*
+```
+CLI argparse (--execute, --i-understand-this-loads-models)
+  → dry-run? print plan + "NO ARTIFACTS" + exit 0
+  → missing ack? refuse + exit 2
+  → run_evaluation(plan)
+       → resolve config (cwd then repo)
+       → resolve held-out = eval_sprint26.jsonl (must exist; n==110)
+       → load base model (no adapter when --compare base)
+       → generate one response per example (log progress)
+       → write_mode_artifacts → sprint26/{baseline_generations,scores,report}
+       → verify_mode_artifacts (exists, non-empty, valid JSON/schema)
+       → if verify OK and ≥1 successful generation:
+            print BASELINE MEASUREMENT COMPLETE + absolute paths + exit 0
+         else:
+            print BASELINE MEASUREMENT FAILED + exit 1
+```
 
 ---
 
-## Expected baseline artifacts (after a real execute)
+## Artifact contract
 
-Directory: `training/evaluation/results/sprint26/`
+Directory (absolute, logged):  
+`<cwd-or-repo>/training/evaluation/results/sprint26/`
 
-| File | Contents |
+| File | Contract |
 |------|----------|
-| `baseline_generations.jsonl` | One row per held-out example: id, response, ok/error, category, track, personality_mode, auto heuristics, null rubric slots |
-| `baseline_scores.json` | Model/dataset IDs, timestamp, gen config, counts, category/track breakdowns, heuristic rates, **unavailable** human metrics |
-| `baseline_report.md` | Human-readable summary of the above + limitations + paths |
+| `baseline_generations.jsonl` | ≥1 JSONL rows; each has id, mode=`base`, `prompt_messages`, `metadata`, `response`, `ok`, null rubric slots |
+| `baseline_scores.json` | Valid JSON; `schema_version=zoe_eval_artifacts_v1`; counts; heuristic rates; human rubric fields `unavailable` (not invented) |
+| `baseline_report.md` | Non-empty human-readable summary + absolute paths |
 
-Future adapter run writes the same schema as `adapter_generations.jsonl` / `adapter_scores.json` / `adapter_report.md` for BASELINE → ADAPTER comparison.
+Future adapter run uses the **same schema** with `adapter_*` filenames / `mode=adapter`.
 
 ---
 
-## Exact command to measure baseline (user runs later; not executed here)
+## Failure behavior
+
+| Condition | Result |
+|-----------|--------|
+| No `--execute` | exit 0, **no** COMPLETE, no files |
+| `--execute` without ack | exit 2, no COMPLETE |
+| Wrong/missing held-out | exit 1 |
+| Held-out ≠ 110 for Sprint 26 | exit 1 |
+| Zero successful generations | exit 1 (no COMPLETE) |
+| Write/verify failure | exit 1, `BASELINE MEASUREMENT FAILED` |
+
+---
+
+## Exact command (operator runs later — not executed in this task)
 
 ```bash
 python -m training.scripts.evaluate_baseline \
@@ -78,36 +96,17 @@ python -m training.scripts.evaluate_baseline \
   --i-understand-this-loads-models
 ```
 
-Uses `data.held_out_eval_path` → `training/data/held_out_eval/eval_sprint26.jsonl` (110 examples).  
-Does **not** load or create an adapter when `--compare base`.
-
-Optional heuristic re-score (no model load):
-
-```bash
-python -m training.scripts.score_generations \
-  --input training/evaluation/results/sprint26/baseline_generations.jsonl \
-  --artifact-dir training/evaluation/results/sprint26
-```
+Prefer `python -m` from the repo root (`%cd zoe-ai` on Colab).
 
 ---
 
-## Gate answers
+## Static confirmation
 
-| Question | Answer |
-|----------|--------|
-| Ready for baseline measurement? | **YES** — pipeline now writes concrete Sprint 26 artifacts on execute+ack |
-| Baseline already measured with new artifacts? | **NO** — this task did not re-run evaluation |
-| Ready for Colab QLoRA after baseline? | **YES, after** you run the baseline command above and confirm the three files exist |
-| Anything still blocking QLoRA itself? | **No infra blocker** from this audit; procedural: finish baseline → train with ack → compare same held-out → human KEEP/REJECT |
-| Can dry-run fake success? | Dry-run still exits 0 but now **explicitly** says no artifacts were written |
-
----
-
-## Comparison intent (unchanged)
-
-Adapter KEEP must answer: **Did fine-tuning actually improve Zoe?** on correctness, grounding, tool honesty, Tanglish, coding, and calibrated personality — **not** training loss or “funnier only.”
-
-Safety gates preserved: train ack, refuse incomplete adapters in production, adapter off by default, base weights never overwritten.
+- `--execute` + ack reaches `run_evaluation` (no alternate silent path).
+- Sprint 26 held-out is enforced by filename + count.
+- Writer always targets resolved absolute `artifact_dir`.
+- COMPLETE banner is behind `verify_mode_artifacts`.
+- No placeholder/fake generations in code paths.
 
 ---
 
@@ -115,4 +114,4 @@ Safety gates preserved: train ack, refuse incomplete adapters in production, ada
 
 **READY FOR BASELINE MEASUREMENT**
 
-Next human/Colab action: run the execute+ack baseline command once, verify the three Sprint 26 artifact files, then proceed to QLoRA.
+Re-run the execute+ack command once on Colab, confirm the three files exist under the logged absolute `artifact_dir`, then proceed to QLoRA.

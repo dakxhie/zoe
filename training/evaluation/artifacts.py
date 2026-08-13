@@ -34,9 +34,98 @@ UNAVAILABLE_REASON_HUMAN = (
     "not computed automatically to avoid invented scores."
 )
 
+EXPECTED_SPRINT26_HELD_OUT_N = 110
+ARTIFACT_SCHEMA_VERSION = "zoe_eval_artifacts_v1"
+
 
 def default_sprint26_artifact_dir(repo_root: Path) -> Path:
-    return repo_root / "training" / "evaluation" / "results" / "sprint26"
+    return (repo_root / "training" / "evaluation" / "results" / "sprint26").resolve()
+
+
+def resolve_artifact_dir(
+    explicit: Path | None,
+    *,
+    repo_root: Path,
+    cwd: Path | None = None,
+) -> Path:
+    """Resolve where baseline/adapter artifacts must be written.
+
+    Prefer the working-tree the operator is standing in (cwd) when it contains
+    Sprint 26 held-out data. This prevents writing under a different checkout
+    than the one being inspected (common on Colab / Drive mounts).
+    """
+    cwd = (cwd or Path.cwd()).resolve()
+    repo_root = repo_root.resolve()
+
+    if explicit is not None:
+        path = explicit if explicit.is_absolute() else (cwd / explicit)
+        return path.resolve()
+
+    cwd_held = cwd / "training" / "data" / "held_out_eval" / "eval_sprint26.jsonl"
+    if cwd_held.is_file():
+        return (cwd / "training" / "evaluation" / "results" / "sprint26").resolve()
+
+    return default_sprint26_artifact_dir(repo_root)
+
+
+def required_artifact_paths(artifact_dir: Path, *, mode: str = "base") -> dict[str, Path]:
+    prefix = "baseline" if mode == "base" else "adapter"
+    artifact_dir = artifact_dir.resolve()
+    return {
+        "generations": artifact_dir / f"{prefix}_generations.jsonl",
+        "scores": artifact_dir / f"{prefix}_scores.json",
+        "report": artifact_dir / f"{prefix}_report.md",
+    }
+
+
+def verify_mode_artifacts(artifact_dir: Path, *, mode: str = "base") -> tuple[bool, list[str]]:
+    """Return (ok, errors). Success requires non-empty gens/report + valid scores JSON."""
+    errors: list[str] = []
+    paths = required_artifact_paths(artifact_dir, mode=mode)
+
+    gen = paths["generations"]
+    if not gen.is_file():
+        errors.append(f"missing generations file: {gen}")
+    else:
+        text = gen.read_text(encoding="utf-8")
+        if not text.strip():
+            errors.append(f"generations file is empty: {gen}")
+        else:
+            lines = [ln for ln in text.splitlines() if ln.strip()]
+            if not lines:
+                errors.append(f"generations file has no JSONL rows: {gen}")
+            else:
+                try:
+                    json.loads(lines[0])
+                except json.JSONDecodeError as exc:
+                    errors.append(f"generations JSONL invalid: {gen} ({exc})")
+
+    scores = paths["scores"]
+    if not scores.is_file():
+        errors.append(f"missing scores file: {scores}")
+    else:
+        try:
+            payload = json.loads(scores.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            errors.append(f"scores JSON invalid: {scores} ({exc})")
+            payload = None
+        if isinstance(payload, dict):
+            if payload.get("schema_version") != ARTIFACT_SCHEMA_VERSION:
+                errors.append(
+                    f"scores schema_version mismatch in {scores}: "
+                    f"{payload.get('schema_version')!r} != {ARTIFACT_SCHEMA_VERSION!r}"
+                )
+            counts = payload.get("counts") or {}
+            if int(counts.get("total_examples") or 0) < 1:
+                errors.append(f"scores report zero total_examples: {scores}")
+
+    report = paths["report"]
+    if not report.is_file():
+        errors.append(f"missing report file: {report}")
+    elif not report.read_text(encoding="utf-8").strip():
+        errors.append(f"report file is empty: {report}")
+
+    return (not errors), errors
 
 
 def _track_of(ex_meta: dict[str, Any], example_id: str | None) -> str:
@@ -58,6 +147,13 @@ def _track_of(ex_meta: dict[str, Any], example_id: str | None) -> str:
     return "unmarked"
 
 
+def prompt_messages_from_example(example: dict[str, Any]) -> list[dict[str, str]]:
+    messages = list(example.get("messages") or [])
+    if messages and messages[-1].get("role") == "assistant":
+        return messages[:-1]
+    return messages
+
+
 def generation_row(
     *,
     example: dict[str, Any],
@@ -66,11 +162,12 @@ def generation_row(
     error: str | None,
     auto_metrics: dict[str, Any],
 ) -> dict[str, Any]:
-    meta = example.get("metadata") or {}
+    meta = dict(example.get("metadata") or {})
     gold = None
     messages = example.get("messages") or []
     if messages and messages[-1].get("role") == "assistant":
         gold = messages[-1].get("content")
+    prompt_messages = prompt_messages_from_example(example)
     ok = error is None and bool((response or "").strip())
     return {
         "id": example.get("id"),
@@ -78,6 +175,8 @@ def generation_row(
         "ok": ok,
         "error": error,
         "response": response if response is not None else "",
+        "prompt_messages": prompt_messages,
+        "metadata": meta,
         "category": meta.get("category"),
         "personality_mode": meta.get("personality_mode"),
         "track": _track_of(meta, example.get("id")),
@@ -86,6 +185,7 @@ def generation_row(
         "rubric_scores": {dim: None for dim in RUBRIC_DIMENSIONS},
         "personality_checks": {k: None for k in PERSONALITY_EVAL_CHECKS},
         "pending_human_rubric": True,
+        "schema_version": ARTIFACT_SCHEMA_VERSION,
     }
 
 
@@ -171,7 +271,7 @@ def build_scores_payload(
     }
 
     return {
-        "schema_version": "zoe_eval_artifacts_v1",
+        "schema_version": ARTIFACT_SCHEMA_VERSION,
         "role": mode,  # base | adapter
         "created_at_utc": run_meta.get("created_at_utc")
         or datetime.now(timezone.utc).isoformat(),
@@ -182,7 +282,7 @@ def build_scores_payload(
         "evaluation_configuration": run_meta.get("generation") or {},
         "rubric_version": run_meta.get("rubric_version"),
         "tools_available": run_meta.get("tools_available", False),
-        "artifact_dir": str(artifact_dir).replace("\\", "/"),
+        "artifact_dir": str(artifact_dir.resolve()).replace("\\", "/"),
         "counts": {
             "total_examples": total,
             "successful_generations": successful,
@@ -191,7 +291,6 @@ def build_scores_payload(
         "category_breakdown": dict(by_category),
         "track_breakdown": dict(by_track),
         "personality_mode_breakdown": dict(by_personality),
-        # Human rubric slots — intentionally unavailable until scored.
         "scores": {
             "personality_score": unavailable_block,
             "professionalism_score": unavailable_block,
@@ -254,6 +353,8 @@ def build_report_markdown(scores: dict[str, Any], *, generations_path: Path) -> 
     counts = scores.get("counts") or {}
     cfg = scores.get("evaluation_configuration") or {}
     sc = scores.get("scores") or {}
+    artifact_dir = Path(str(scores.get("artifact_dir") or ".")).resolve()
+    prefix = "baseline" if role == "base" else "adapter"
 
     def _fmt_metric(block: Any) -> str:
         if not isinstance(block, dict):
@@ -341,16 +442,16 @@ def build_report_markdown(scores: dict[str, Any], *, generations_path: Path) -> 
             "- Training loss and “funnier” responses alone must **not** decide adapter success.",
             "- Held-out prompts must stay frozen between baseline and adapter runs.",
             "",
-            "## Artifact paths",
+            "## Artifact paths (absolute)",
             "",
-            f"- Generations: `{generations_path.as_posix()}`",
-            f"- Scores JSON: `{(Path(str(scores.get('artifact_dir') or '.')) / ('baseline_scores.json' if role == 'base' else 'adapter_scores.json')).as_posix()}`",
-            f"- Report: `{(Path(str(scores.get('artifact_dir') or '.')) / ('baseline_report.md' if role == 'base' else 'adapter_report.md')).as_posix()}`",
+            f"- Generations: `{generations_path.resolve().as_posix()}`",
+            f"- Scores JSON: `{(artifact_dir / f'{prefix}_scores.json').as_posix()}`",
+            f"- Report: `{(artifact_dir / f'{prefix}_report.md').as_posix()}`",
             "",
             "## Next step for comparison",
             "",
             "After QLoRA, generate adapter artifacts in the **same schema** "
-            "(`schema_version: zoe_eval_artifacts_v1`) and compare the same "
+            f"(`schema_version: {ARTIFACT_SCHEMA_VERSION}`) and compare the same "
             "held-out IDs on correctness, grounding, tool honesty, Tanglish, "
             "coding, and calibrated personality — not loss curves alone.",
             "",
@@ -367,13 +468,19 @@ def write_mode_artifacts(
     run_meta: dict[str, Any],
 ) -> dict[str, Path]:
     """Write generations JSONL + scores JSON + markdown report for one mode."""
+    artifact_dir = artifact_dir.resolve()
     artifact_dir.mkdir(parents=True, exist_ok=True)
-    prefix = "baseline" if mode == "base" else "adapter"
-    gen_path = artifact_dir / f"{prefix}_generations.jsonl"
-    scores_path = artifact_dir / f"{prefix}_scores.json"
-    report_path = artifact_dir / f"{prefix}_report.md"
+    paths = required_artifact_paths(artifact_dir, mode=mode)
+    gen_path = paths["generations"]
+    scores_path = paths["scores"]
+    report_path = paths["report"]
 
     mode_gens = [g for g in generations if g.get("mode") == mode]
+    if not mode_gens:
+        raise RuntimeError(
+            f"Refusing to write empty {mode} artifact set under {artifact_dir}"
+        )
+
     with gen_path.open("w", encoding="utf-8") as handle:
         for row in mode_gens:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -392,8 +499,15 @@ def write_mode_artifacts(
         build_report_markdown(scores, generations_path=gen_path),
         encoding="utf-8",
     )
+
+    ok, errors = verify_mode_artifacts(artifact_dir, mode=mode)
+    if not ok:
+        raise RuntimeError(
+            "Artifact verification failed after write:\n  - " + "\n  - ".join(errors)
+        )
+
     return {
-        "generations": gen_path,
-        "scores": scores_path,
-        "report": report_path,
+        "generations": gen_path.resolve(),
+        "scores": scores_path.resolve(),
+        "report": report_path.resolve(),
     }

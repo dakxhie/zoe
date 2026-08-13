@@ -4,6 +4,9 @@ Does not run model inference unless explicitly invoked with --execute
 AND --i-understand-this-loads-models.
 
 Without those flags this script ONLY prints a plan and writes nothing.
+
+"BASELINE MEASUREMENT COMPLETE" is printed only by the runner after
+on-disk artifact verification succeeds.
 """
 
 from __future__ import annotations
@@ -16,7 +19,10 @@ _REPO = Path(__file__).resolve().parents[2]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
-from training.evaluation.artifacts import default_sprint26_artifact_dir  # noqa: E402
+from training.evaluation.artifacts import (  # noqa: E402
+    required_artifact_paths,
+    resolve_artifact_dir,
+)
 from training.evaluation.runner import (  # noqa: E402
     EvaluationPlan,
     describe_plan,
@@ -28,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Evaluate base vs fine-tuned Zoe (opt-in execute). "
-            "Dry run writes no artifacts."
+            "Dry run writes no artifacts. Success requires verified Sprint 26 files."
         )
     )
     parser.add_argument(
@@ -57,8 +63,8 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=None,
         help=(
-            "Directory for baseline_/adapter_ generations, scores, and report "
-            f"(default: {default_sprint26_artifact_dir(_REPO)})"
+            "Directory for baseline_/adapter_ generations, scores, and report. "
+            "Default: <cwd or repo>/training/evaluation/results/sprint26"
         ),
     )
     parser.add_argument(
@@ -84,7 +90,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     modes = [m.strip() for m in args.compare.split(",") if m.strip()]
-    artifact_dir = args.artifact_dir or default_sprint26_artifact_dir(_REPO)
+    artifact_dir = resolve_artifact_dir(
+        args.artifact_dir,
+        repo_root=_REPO,
+        cwd=Path.cwd(),
+    )
 
     plan = EvaluationPlan(
         config_path=args.config,
@@ -95,16 +105,18 @@ def main(argv: list[str] | None = None) -> int:
         artifact_dir=artifact_dir,
     )
     print(describe_plan(plan))
+    print(f"  cwd: {Path.cwd().resolve()}")
+    print(f"  repo_root_from_cli_file: {_REPO.resolve()}")
     print(f"  expected_artifacts_under: {artifact_dir}")
     if modes == ["base"]:
         print("  expected_files:")
-        print(f"    - {artifact_dir / 'baseline_generations.jsonl'}")
-        print(f"    - {artifact_dir / 'baseline_scores.json'}")
-        print(f"    - {artifact_dir / 'baseline_report.md'}")
+        for kind, path in required_artifact_paths(artifact_dir, mode="base").items():
+            print(f"    - {kind}: {path}")
 
     if not args.execute:
         print()
         print("DRY PLAN ONLY — NO BASELINE ARTIFACTS WERE WRITTEN.")
+        print("BASELINE MEASUREMENT COMPLETE was NOT printed.")
         print(
             "To measure the unmodified base model on Sprint 26 held-out, run:"
         )
@@ -117,12 +129,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if not args.ack_load:
         print("Refusing: --execute requires --i-understand-this-loads-models")
+        print("BASELINE MEASUREMENT COMPLETE was NOT printed.")
         return 2
 
     if "adapter" in modes and args.adapter_path is None:
         print("Refusing: adapter compare requires --adapter-path")
+        print("BASELINE MEASUREMENT COMPLETE was NOT printed.")
         return 2
 
+    # Do not print COMPLETE here — only runner after verified writes.
     return run_evaluation(plan)
 
 
