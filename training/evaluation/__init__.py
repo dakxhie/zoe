@@ -1,4 +1,4 @@
-"""Evaluation package for base vs adapter comparison (skeleton)."""
+"""Evaluation package for base vs adapter comparison."""
 
 from training.evaluation.metrics import METRIC_NAMES, RUBRIC_DIMENSIONS, TOOL_PRESERVATION_CHECKS
 

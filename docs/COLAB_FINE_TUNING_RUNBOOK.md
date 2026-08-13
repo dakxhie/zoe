@@ -97,8 +97,14 @@ Loads base weights. Requires explicit acknowledgement.
   --i-understand-this-loads-models
 ```
 
-Record outputs for later base-vs-adapter comparison.  
-Do **not** treat this as acceptance of any adapter.
+Expected artifacts (primary):
+
+- `training/evaluation/results/sprint26/baseline_generations.jsonl`
+- `training/evaluation/results/sprint26/baseline_scores.json`
+- `training/evaluation/results/sprint26/baseline_report.md`
+
+Dry-run without `--execute` writes **nothing**.  
+Do **not** treat baseline heuristics as acceptance of any adapter.
 
 ---
 
@@ -131,7 +137,7 @@ Incomplete/failed runs write `TRAINING_INCOMPLETE` / `TRAINING_FAILED` and must 
 
 ## Phase 5 — Evaluation
 
-Same prompts, generation settings, and rubric as baseline:
+Same prompts, generation settings, and rubric as baseline (writes `adapter_*` beside `baseline_*`):
 
 ```bash
 !python -m training.scripts.evaluate_baseline \
@@ -139,6 +145,7 @@ Same prompts, generation settings, and rubric as baseline:
   --split held_out_eval \
   --compare base,adapter \
   --adapter-path training/adapters/runs/colab_qlora_pilot \
+  --artifact-dir training/evaluation/results/sprint26 \
   --execute \
   --i-understand-this-loads-models
 ```
