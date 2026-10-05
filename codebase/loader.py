@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import TypedDict
+
+from tools.fs_policy import is_env_template, is_sensitive_path
+from tools.secret_scan import line_has_secret, scan_and_redact
 
 SUPPORTED_EXTENSIONS: frozenset[str] = frozenset(
     {
@@ -70,8 +74,21 @@ def _resolve_project_path(project_path: str | Path) -> Path:
 
 
 def _should_skip_path(path: Path) -> bool:
-    """Return True when a path is inside a skipped directory."""
-    return any(part in SKIP_DIRS for part in path.parts)
+    """Return True for skipped/hidden directories and sensitive files (Phase B1 policy)."""
+    parts = path.parts
+    if any(part in SKIP_DIRS for part in parts):
+        return True
+    if any(part.startswith(".") for part in parts[:-1]):
+        return True
+    if parts and parts[-1].startswith(".") and parts[-1] not in SPECIAL_FILENAMES:
+        return True
+    return is_sensitive_path(parts)
+
+
+def _escapes_project(project_root: Path, file_path: Path) -> bool:
+    """Return True when a (symlinked) file resolves outside the project root."""
+    target = Path(os.path.realpath(file_path))
+    return not (target == project_root or project_root in target.parents)
 
 
 def _is_supported_file(path: Path) -> bool:
@@ -118,6 +135,13 @@ def _read_code_file(project_root: Path, file_path: Path) -> CodeFile | None:
     if not content:
         return None
 
+    if is_env_template(file_path.name) and any(line_has_secret(l) for l in content.splitlines()):
+        return None
+    scan = scan_and_redact(content)
+    if scan.blocked:
+        return None
+    content = scan.text
+
     relative_path = file_path.relative_to(project_root).as_posix()
 
     return {
@@ -136,6 +160,8 @@ def load_code(project_path: str | Path) -> list[CodeFile]:
 
     for file_path in sorted(project_root.rglob("*")):
         if _should_skip_path(file_path.relative_to(project_root)):
+            continue
+        if _escapes_project(project_root, file_path):
             continue
         if not _is_supported_file(file_path):
             continue

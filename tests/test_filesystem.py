@@ -2,9 +2,21 @@
 
 from __future__ import annotations
 
+import pytest
+
+import tools.fs_policy as fs_policy
 from tools.filesystem import find_file, list_files, read_file, search_text
 
 README_CANDIDATES = ("README.md", "readme.md")
+
+
+@pytest.fixture(autouse=True)
+def _workspace_is_repo(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests read Zoe's own files, so point WORKSPACE_ROOT at the repo explicitly."""
+    monkeypatch.setenv(fs_policy.WORKSPACE_ROOT_ENV, str(fs_policy.ROOT))
+    fs_policy.clear_workspace_cache()
+    yield
+    fs_policy.clear_workspace_cache()
 
 
 def _find_readme_path() -> str:
