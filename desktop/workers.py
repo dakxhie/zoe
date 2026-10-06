@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import logging
 import time
-import traceback
 from dataclasses import dataclass
 from typing import Any
 
 from PySide6.QtCore import QObject, QRunnable, QThread, QThreadPool, Signal, Slot
+
+from core.safe_errors import log_safe_exception
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +51,10 @@ class FunctionWorker(QRunnable):
             result = self.fn(*self.args, **self.kwargs)
             self.signals.finished.emit(WorkerResult(ok=True, data=result))
         except Exception as exc:
-            logger.exception("Worker %s failed", self.name)
-            self.signals.failed.emit(f"{exc}\n{traceback.format_exc(limit=2)}")
+            # Phase B3: safe one-line log and a fixed message; no traceback,
+            # no exception text reaches the UI.
+            safe = log_safe_exception(logger, f"Worker {self.name}", exc)
+            self.signals.failed.emit(safe.message)
 
 
 class ChatWorker(QThread):
@@ -84,7 +87,7 @@ class ChatWorker(QThread):
             logger.info("Desktop chat generation finished in %.2fs", elapsed)
             self.completed.emit(reply)
         except Exception as exc:
-            self.failed.emit(str(exc))
+            self.failed.emit(log_safe_exception(logger, "Desktop chat turn", exc).message)
 
 
 class VisionWorker(QThread):
@@ -105,7 +108,7 @@ class VisionWorker(QThread):
             reply = generate_image_response(self.image_path, self.prompt)
             self.completed.emit(reply)
         except Exception as exc:
-            self.failed.emit(str(exc))
+            self.failed.emit(log_safe_exception(logger, "Desktop vision turn", exc).message)
 
 
 class StartupWorker(QThread):
@@ -135,7 +138,7 @@ class StartupWorker(QThread):
             for line in lines:
                 self.line_ready.emit(line)
         except Exception as exc:
-            lines.append(f"Startup warning: {exc}")
+            lines.append(f"Startup warning: {log_safe_exception(logger, 'Desktop startup', exc).message}")
         self.finished_ok.emit(lines)
 
 

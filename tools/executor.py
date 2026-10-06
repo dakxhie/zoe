@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import logging
 
-from tools.calculator import CalculatorError, calculate, is_calculator_request
+from core.safe_errors import log_safe_exception
+from tools.calculator import (
+    CalculatorError,
+    CalculatorInternalError,
+    CalculatorMathError,
+    calculate,
+    is_calculator_request,
+)
 from tools.datetime_tool import get_datetime_response
 from tools.filesystem import (
     FilesystemError,
@@ -80,7 +87,20 @@ def _try_plugin_execute(query: str, route: str) -> tuple[bool, str]:
 
 
 def execute_tool(query: str) -> tuple[bool, str]:
-    """Execute a lightweight tool when the query is handled outside the LLM."""
+    """Execute a lightweight tool when the query is handled outside the LLM.
+
+    Phase B3: nothing escapes this boundary. Typed tool errors keep their own
+    safe messages; any unexpected exception ends the tool step with a fixed
+    safe message (no traceback, no exception text).
+    """
+    try:
+        return _execute_tool(query)
+    except Exception as exc:
+        safe = log_safe_exception(logger, "Tool execution", exc)
+        return True, safe.message
+
+
+def _execute_tool(query: str) -> tuple[bool, str]:
     tool = route_query(query)
 
     if tool == "filesystem":
@@ -99,6 +119,9 @@ def execute_tool(query: str) -> tuple[bool, str]:
     if is_calculator_request(query):
         try:
             return True, calculate(query)
+        except (CalculatorMathError, CalculatorInternalError) as exc:
+            # e.g. "5 / 0": typed math_error, the turn completes safely.
+            return True, exc.safe_message
         except CalculatorError:
             return False, ""
 

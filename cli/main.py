@@ -10,11 +10,14 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import atexit
+import logging
+
 import typer
 
 from core.diagnostics import print_startup_diagnostics
 from core.doctor import print_doctor_report, run_doctor
 from core.logging_config import configure_logging
+from core.safe_errors import CANCELLED_MESSAGE, log_safe_exception
 
 from deployment.config import load_config
 from deployment.shutdown import run_shutdown_sequence
@@ -23,6 +26,8 @@ load_config()
 configure_logging()
 
 atexit.register(run_shutdown_sequence)
+
+_logger = logging.getLogger("zoe.cli")
 
 _CLI_EPILOG = """
 Examples:
@@ -71,12 +76,16 @@ def _run_chat_loop() -> None:
     from deployment.startup import run_startup_sequence
 
     _print_welcome()
-    _prepare_chat_session()
-    report = run_startup_sequence()
-    for line in report.diagnostic_lines:
-        print(line)
-    if not report.diagnostic_lines:
-        print_startup_diagnostics()
+    try:
+        _prepare_chat_session()
+        report = run_startup_sequence()
+        for line in report.diagnostic_lines:
+            print(line)
+        if not report.diagnostic_lines:
+            print_startup_diagnostics()
+    except Exception as exc:
+        print(f"Zoe: {log_safe_exception(_logger, 'Chat startup', exc).message}")
+        return
     print()
 
     while True:
@@ -94,8 +103,18 @@ def _run_chat_loop() -> None:
         try:
             reply = generate_response(user_input)
         except ModelLoadError as exc:
-            print(f"Zoe: Sorry, I could not load the model. {exc}")
+            # Phase B3: the model error text can embed paths or wrapped
+            # library messages, so only the fixed safe message is shown.
+            print(f"Zoe: {log_safe_exception(_logger, 'Model load', exc).message}")
             break
+        except KeyboardInterrupt:
+            print(f"\nZoe: {CANCELLED_MESSAGE}")
+            continue
+        except Exception as exc:
+            # Phase B3 catch-all at the turn edge (A.1 §10.5): the session
+            # continues and the user sees a safe message, never a traceback.
+            print(f"Zoe: {log_safe_exception(_logger, 'Chat turn', exc).message}")
+            continue
 
         print(f"Zoe: {reply}")
 
@@ -137,8 +156,8 @@ def image_cmd(
     try:
         reply = generate_image_response(image_path, prompt)
     except ModelLoadError as exc:
-        print(f"Zoe: Sorry, I could not load the model. {exc}")
-        raise typer.Exit(code=1) from exc
+        print(f"Zoe: {log_safe_exception(_logger, 'Model load', exc).message}")
+        raise typer.Exit(code=1) from None
 
     print(f"Zoe: {reply}")
 
@@ -346,5 +365,19 @@ def history_stats() -> None:
     print(f"Database size: {stats.database_size} bytes")
 
 
+def main() -> None:
+    """Run the CLI; unexpected errors print a safe message instead of a traceback."""
+    try:
+        app()
+    except SystemExit:
+        raise
+    except KeyboardInterrupt:
+        print(f"\n{CANCELLED_MESSAGE}")
+        raise SystemExit(130) from None
+    except Exception as exc:
+        print(f"Zoe: {log_safe_exception(_logger, 'CLI command', exc).message}")
+        raise SystemExit(1) from None
+
+
 if __name__ == "__main__":
-    app()
+    main()

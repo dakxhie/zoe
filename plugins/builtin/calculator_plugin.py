@@ -5,16 +5,27 @@ from __future__ import annotations
 from plugins.permissions import Permission
 from plugins.plugin import Plugin, ToolCategory
 from plugins.sandbox import wrap_execute
-from tools.calculator import CalculatorError, calculate, is_calculator_request
+from tools.calculator import (
+    CalculatorError,
+    CalculatorInternalError,
+    CalculatorMathError,
+    calculate,
+    is_calculator_request,
+)
 
 
 def _match(query: str) -> bool:
+    # Pure detection (Phase B3): parses and validates, never evaluates.
     return is_calculator_request(query)
 
 
 def _execute(query: str) -> tuple[bool, str]:
     try:
         return True, calculate(query)
+    except (CalculatorMathError, CalculatorInternalError) as exc:
+        # Phase B3: a typed math_error / internal_error completes the turn
+        # with its safe message (e.g. "5 / 0") instead of falling through.
+        return True, exc.safe_message
     except CalculatorError:
         return False, ""
 
