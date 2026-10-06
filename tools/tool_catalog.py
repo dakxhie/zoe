@@ -1,7 +1,8 @@
 """Phase C tool catalog and registry (ZOE_PHASE_A1_DESIGN.md §8.1, §9, §24.2).
 
 The catalog holds the ``ToolDefinition`` of every structured tool. It contains
-only the accepted read-only tools and the authorized web tool:
+only the accepted read-only tools, the authorized web tool and the explicit
+memory tool:
 
 =============  ===============  =========================================  ===========
 tool           permission       implementation (reused)                    availability
@@ -15,20 +16,31 @@ get_time       clock            ``tools.datetime_tool``                    avail
 search_code    code.search      ``codebase.retriever.search_code``         available
 web_search     network          B2 ``web.policy.gated_search``             available*
 fetch_page     network          (B2 ``web.reader``; not exposed)           unavailable
+remember       memory.write     ``memory_review.process_memory_candidate``  available**
 =============  ===============  =========================================  ===========
 
 ``*`` available as a definition; every call still needs the turn-scoped B2
 authorization from the current user message. ``fetch_page`` exists only as an
 unavailable definition: the accepted contract lists it as future (§24.2).
 
-There is no write, delete, rename, shell, process, git-mutation or other
-side-effect tool, and the registry refuses to register one. Handlers are thin
+``**`` (Phase E remediation) ``remember`` saves one fact through the existing
+memory write path (``memory.store.save_memory``'s pipeline, with the
+assistant-reply inference disabled). Every call needs the turn-scoped memory
+authorization that only an explicit remember request in the current user
+message produces (``tools.tool_loop``), is denied outside an active tool loop,
+refuses secrets and facts not stated in the current message (PolicyGate).
+
+There is no file write, delete, rename, shell, process, git-mutation or other
+side-effect tool, and the registry refuses to register one: the only
+side-effect class besides network is ``memory_write``, accepted for exactly
+the tool named ``remember``. Handlers are thin
 adapters over the existing B1/B2/B3 code (no second security system) and run
 only inside the ``ToolExecutor`` (``require_executor``).
 """
 
 from __future__ import annotations
 
+import logging
 import threading
 from typing import Any, Iterable
 
@@ -41,7 +53,9 @@ from plugins.tool_definition import (
     TrustClass,
 )
 from tools.result_envelope import TOOL_LIMITS, ResultStatus, ToolLimits
-from tools.tool_protocol import WEB_MESSAGES, ToolError, require_executor
+from tools.tool_protocol import MEMORY_NOT_AUTHORIZED_MESSAGE, WEB_MESSAGES, ToolError, require_executor
+
+logger = logging.getLogger(__name__)
 
 # Name fragments that can never be registered as a Phase C tool.
 FORBIDDEN_NAME_PARTS = (
@@ -67,6 +81,13 @@ FORBIDDEN_NAME_PARTS = (
     "save",
 )
 
+# The single exception to FORBIDDEN_NAME_PARTS (Phase E remediation): exactly
+# this name, and only with the memory_write side effect / memory.write
+# permission. ``remember_x``, ``save``, ``write_memory`` ... stay refused.
+MEMORY_TOOL_NAME = "remember"
+MAX_MEMORY_FACT_CHARS = 500
+MEMORY_NOT_STORED = "memory_not_stored"
+
 # B1 path arguments checked by the PolicyGate before execution: tool -> (argument, AccessMode).
 FILESYSTEM_PATH_ARGUMENTS: dict[str, tuple[str, str]] = {
     "list_files": ("path", "list"),
@@ -89,10 +110,15 @@ class ToolRegistry:
     def register(self, definition: ToolDefinition) -> None:
         if not isinstance(definition, ToolDefinition):
             raise ToolDefinitionError("only ToolDefinition instances can be registered")
+        memory_tool = (
+            definition.name == MEMORY_TOOL_NAME
+            and definition.side_effect is SideEffect.MEMORY_WRITE
+            and definition.permission is PermissionClass.MEMORY_WRITE
+        )
         parts = set(definition.name.split("_"))
-        if any(part in parts for part in FORBIDDEN_NAME_PARTS):
+        if not memory_tool and any(part in parts for part in FORBIDDEN_NAME_PARTS):
             raise ToolDefinitionError("side-effect tools cannot be registered in Phase C")
-        if definition.side_effect not in {SideEffect.NONE, SideEffect.NETWORK}:
+        if not memory_tool and definition.side_effect not in {SideEffect.NONE, SideEffect.NETWORK}:
             raise ToolDefinitionError("side-effect tools cannot be registered in Phase C")
         if definition.name in self._tools:
             raise ToolDefinitionError(f"duplicate tool name {definition.name!r}")
@@ -237,6 +263,39 @@ def _web_search(query: str, max_results: int) -> dict[str, Any]:
             for item in outcome.items
         ],
     }
+
+
+def _remember(fact: str) -> dict[str, Any]:
+    """Save one explicitly requested fact through the existing memory pipeline.
+
+    The PolicyGate already required the current user message's explicit
+    remember request, a fact stated in that message and no secret; the turn
+    authorization is re-checked here. ``assistant_text=""`` keeps the
+    pipeline's reply inference off, so nothing from history, assistant replies
+    or tool results is ever stored. Scoring, forget filter, reinforcement,
+    consolidation, de-duplication and storage are the existing ones.
+    """
+    require_executor()
+    from tools.tool_loop import memory_write_authorized
+
+    if not memory_write_authorized():
+        raise ToolError("permission_denied", MEMORY_NOT_AUTHORIZED_MESSAGE, ResultStatus.DENIED)
+    from memory.intelligence.memory_review import process_memory_candidate
+
+    try:
+        stored = process_memory_candidate(fact, assistant_text="")
+    except Exception as exc:  # store errors stay internal (typed, no exception text)
+        from core.safe_errors import log_safe_exception
+
+        log_safe_exception(logger, "Memory tool", exc)
+        raise ToolError("internal_error", "The memory store is unavailable right now.") from None
+    if not stored:
+        raise ToolError(
+            MEMORY_NOT_STORED,
+            "Nothing was stored: the memory already exists, or it is not a personal fact "
+            "in the user's own words (for example 'My favorite color is blue').",
+        )
+    return {"stored": True, "fact": fact}
 
 
 # ---------------------------------------------------------------------------
@@ -483,6 +542,26 @@ def build_default_definitions() -> list[ToolDefinition]:
             plugin_id="builtin.web",
             source_kind="web",
             handler=None,
+        ),
+        ToolDefinition(
+            name=MEMORY_TOOL_NAME,
+            tool_version=1,
+            description=(
+                "Save one fact about the user to long-term memory. Only when the current user message "
+                "explicitly asks you to remember something; state the fact in the user's own words."
+            ),
+            arguments_schema=_obj(
+                {"fact": {"type": "string", "minLength": 1, "maxLength": MAX_MEMORY_FACT_CHARS}}, ["fact"]
+            ),
+            result_schema=_obj({"stored": {"type": "boolean"}, "fact": {"type": "string"}}, ["stored", "fact"]),
+            permission=PermissionClass.MEMORY_WRITE,
+            trust=TrustClass.UNTRUSTED,
+            availability=Availability.AVAILABLE,
+            side_effect=SideEffect.MEMORY_WRITE,
+            timeout_s=60,
+            plugin_id="builtin.memory",
+            source_kind="memory",
+            handler=_remember,
         ),
     ]
 

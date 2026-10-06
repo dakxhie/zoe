@@ -194,9 +194,10 @@ def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
     Phase B2: the web authorization decision is computed once from this prompt
     (the current user message) and discarded when the turn ends.
 
-    Phase D: with ``ZOE_TOOL_LOOP`` ON (default OFF) the turn goes through the
-    bounded tool loop, the only execution authority; the legacy path below is
-    not called. With the flag OFF the legacy path is unchanged.
+    Phase D/E: with ``ZOE_TOOL_LOOP`` ON (Phase E: the default) the turn goes
+    through the bounded tool loop, the only execution authority; the legacy
+    path below is not called. With the flag explicitly OFF the legacy path is
+    unchanged.
     """
     from tools.tool_loop import is_tool_loop_enabled
     from web.policy import web_turn
@@ -217,13 +218,56 @@ def _tool_loop_model(max_new_tokens: int):
     return model_fn
 
 
-def _generate_tool_loop_response(prompt: str, max_new_tokens: int = 256) -> str:
-    """Phase D turn: system + offered tool schemas + existing history + current message.
+def _complete_tool_loop_turn(user_prompt: str, assistant_reply: str) -> str:
+    """Phase E: the non-executing parts of ``_complete_turn`` for loop turns.
 
-    No legacy execution, retrieval or memory paths run here; only the user
-    message and the final answer are recorded in the existing history.
+    Chat hooks, history, the conversation-finished event and telemetry (counts
+    only) run as on the legacy path. ``_finalize_turn_memory`` does not run:
+    automatic post-turn memory stays off with the loop on (Phase D contract).
     """
+    from plugins.plugin_api import apply_chat_hooks
+
+    reply = apply_chat_hooks(user_prompt, assistant_reply)
+    _record_exchange(user_prompt, reply)
+    _emit_conversation_finished(user_prompt, reply)
+    try:
+        from deployment.telemetry import record_telemetry
+
+        record_telemetry("conversation", {"chars": len(reply)})
+    except Exception as exc:
+        # Telemetry must never interrupt a completed chat turn.
+        logger.debug("Conversation telemetry skipped: %s", exc)
+    return reply
+
+
+def _generate_tool_loop_response(prompt: str, max_new_tokens: int = 256) -> str:
+    """Phase D/E turn: system + offered tool schemas + existing history + current message.
+
+    Phase E restores the non-executing compatibility pieces of the legacy turn:
+    plugin initialisation (discovery/registration only; legacy plugin routes
+    stay blocked), the conversation started/finished events, the read-only
+    profile summary reply, chat hooks and telemetry. No legacy execution,
+    vision, web-route or memory-write path runs here; the loop is the only
+    execution authority (memories are saved only by the loop's ``remember``
+    tool, when the current message explicitly asks to remember).
+    """
+    from plugins.events import Event, emit
+    from plugins.manager import initialize_plugins
     from tools.tool_loop import run_tool_loop
+
+    initialize_plugins()
+    emit(Event.CONVERSATION_STARTED, {"user_message": prompt})
+
+    try:  # read-only: summarizes stored memories; never writes, never runs tools
+        from memory.intelligence.memory_review import respond_to_profile_query
+
+        profile_reply = respond_to_profile_query(prompt)
+        if profile_reply is not None:
+            _record_exchange(prompt, profile_reply)
+            _emit_conversation_finished(prompt, profile_reply)
+            return profile_reply
+    except Exception as exc:
+        logger.debug("Profile query handling skipped: %s", exc)
 
     history = get_history(max_messages=20)
     result = run_tool_loop(
@@ -232,8 +276,7 @@ def _generate_tool_loop_response(prompt: str, max_new_tokens: int = 256) -> str:
         history=history,
         system_prompt=_build_system_content(""),
     )
-    _record_exchange(prompt, result.text)
-    return result.text
+    return _complete_tool_loop_turn(prompt, result.text)
 
 
 def _generate_response_for_turn(prompt: str, max_new_tokens: int = 256) -> str:

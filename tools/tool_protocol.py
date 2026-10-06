@@ -136,6 +136,14 @@ UNEXPECTED_TOOL_MESSAGE = "The tool failed unexpectedly."
 TIMEOUT_MESSAGE = "The tool did not finish within its time limit."
 INVALID_RESULT_MESSAGE = "The tool returned a result in an unexpected shape."
 SECRET_BLOCKED_MESSAGE = "The tool result contained a private key, so it was withheld."
+MEMORY_NOT_AUTHORIZED_MESSAGE = (
+    "Saving a memory is not authorized for this turn. Only an explicit request in the current "
+    "message (for example 'remember that ...') can allow it."
+)
+MEMORY_SECRET_MESSAGE = "That looks like a secret (a password, key or token), so it was not stored."
+MEMORY_NOT_GROUNDED_MESSAGE = (
+    "Only a fact stated in the current user message, in the user's own words, can be remembered."
+)
 
 WEB_MESSAGES = {
     ErrorType.WEB_NOT_AUTHORIZED: (
@@ -542,7 +550,10 @@ class PolicyGate:
 
     Inputs are closed: the tool definition and the validated arguments. Web
     tools additionally read the turn-scoped B2 decision, which only the current
-    user message can produce. ``ToolCall.reason`` is never passed in.
+    user message can produce. The memory tool reads the analogous turn-scoped
+    memory authorization (explicit remember request in the current user
+    message, set by the tool loop at turn start). ``ToolCall.reason`` is never
+    passed in.
     """
 
     def __init__(self, path_arguments: Mapping[str, tuple[str, str]] | None = None) -> None:
@@ -559,6 +570,8 @@ class PolicyGate:
             return self._check_filesystem(definition, arguments)
         if definition.permission is PermissionClass.NETWORK:
             return self._check_web()
+        if definition.permission is PermissionClass.MEMORY_WRITE:
+            return self._check_memory(definition, arguments)
         if definition.permission in {PermissionClass.COMPUTE, PermissionClass.CLOCK, PermissionClass.CODE_SEARCH}:
             return ALLOW
         return PolicyDecision(False, ResultStatus.DENIED, PERMISSION_DENIED, "That tool is not permitted.")
@@ -589,6 +602,28 @@ class PolicyGate:
         if not decision.allowed:
             error = decision.error_type or ErrorType.WEB_NOT_AUTHORIZED
             return PolicyDecision(False, ResultStatus.DENIED, error.value, WEB_MESSAGES[error])
+        return ALLOW
+
+
+    def _check_memory(self, definition: "ToolDefinition", arguments: Mapping[str, Any]) -> PolicyDecision:
+        # Exactly the ``remember`` tool; authorized only by the current user
+        # message (turn-scoped, fixed at turn start, never by history, tool
+        # results or ``reason``) and only inside an active tool loop.
+        from tools.tool_loop import memory_fact_grounded, memory_write_authorized
+        from web.policy import scan_message_secrets
+
+        if definition.name != "remember":
+            return PolicyDecision(False, ResultStatus.DENIED, PERMISSION_DENIED, "That tool is not permitted.")
+        if not memory_write_authorized():
+            return PolicyDecision(False, ResultStatus.DENIED, PERMISSION_DENIED, MEMORY_NOT_AUTHORIZED_MESSAGE)
+        fact = arguments.get("fact")
+        if not isinstance(fact, str):
+            return PolicyDecision(False, ResultStatus.DENIED, PERMISSION_DENIED, "That tool is not permitted.")
+        scan = scan_and_redact(fact)  # Phase C/B1 secret scan, plus B2's message secret scan
+        if scan.blocked or scan.redacted_lines or scan_message_secrets(fact):
+            return PolicyDecision(False, ResultStatus.DENIED, SENSITIVE_CONTENT, MEMORY_SECRET_MESSAGE)
+        if not memory_fact_grounded(fact):
+            return PolicyDecision(False, ResultStatus.DENIED, PERMISSION_DENIED, MEMORY_NOT_GROUNDED_MESSAGE)
         return ALLOW
 
 

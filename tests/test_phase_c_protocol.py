@@ -49,6 +49,7 @@ ACCEPTED_TOOLS = {
     "search_code",
     "web_search",
     "fetch_page",
+    "remember",  # Phase E remediation: the single memory_write tool
 }
 
 
@@ -267,7 +268,10 @@ def test_catalog_contains_only_accepted_tools() -> None:
     registry = get_tool_registry()
     assert set(registry.names()) == ACCEPTED_TOOLS
     for definition in registry.definitions():
-        assert definition.side_effect in {SideEffect.NONE, SideEffect.NETWORK}
+        if definition.name == "remember":  # Phase E remediation: only remember may write (memory only)
+            assert definition.side_effect is SideEffect.MEMORY_WRITE
+        else:
+            assert definition.side_effect in {SideEffect.NONE, SideEffect.NETWORK}
         assert 0 < definition.timeout_s <= 120
         assert definition.id == f"zoe.{definition.name}"
         assert definition.arguments_schema["additionalProperties"] is False

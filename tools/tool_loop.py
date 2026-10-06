@@ -1,20 +1,26 @@
 """Phase D bounded model/tool loop (ZOE_PHASE_A1_DESIGN.md §3, §8.6, §10.3, §22, §23.5).
 
-Feature flag ``ZOE_TOOL_LOOP`` (default **OFF**). With the flag OFF nothing in
-this module runs and the legacy pipeline behaves exactly as before. With the
-flag ON, ``brain.pipeline.generate_response`` routes every chat turn through
-``run_tool_loop`` and this loop is the only execution authority:
+Feature flag ``ZOE_TOOL_LOOP`` (Phase E: default **ON**). With the flag OFF
+nothing in this module runs and the legacy pipeline behaves exactly as before.
+With the flag ON (the default), ``brain.pipeline.generate_response`` routes
+every chat turn through ``run_tool_loop`` and this loop is the only execution
+authority:
 
     MODEL -> Phase C parse (QwenToolCallAdapter.parse) -> turn budgets
           -> Phase C ToolExecutor.execute (schema, PolicyGate, B1/B2/B3,
              timeout, secret scan, envelope) -> tool result -> MODEL
 
-Flag semantics (read once per process, then cached):
+Flag semantics (Phase E; read once per process, then cached; values are
+case-insensitive with surrounding whitespace ignored):
 
-- absent, empty, ``0``, ``false``, ``no``, ``off``      -> OFF
-- ``1``, ``true``, ``yes``, ``on`` (case-insensitive,
-  surrounding whitespace ignored)                       -> ON
-- anything else (``2``, ``enabled``, ...)               -> OFF (fail closed)
+- ``0``, ``false``, ``no``, ``off``                     -> OFF (legacy pipeline)
+- absent (unset)                                        -> ON
+- empty or whitespace-only (treated like unset)         -> ON
+- ``1``, ``true``, ``yes``, ``on``                      -> ON
+- anything else (``2``, ``enabled``, ...)               -> ON (only an explicit
+  OFF value selects the legacy pipeline)
+
+``is_tool_loop_enabled`` is the single authoritative config read.
 
 Neither tool nor model output can change the cached value. The test-only
 ``reset_tool_loop_flag_for_tests`` is refused while any loop is active.
@@ -64,10 +70,22 @@ file.", "I deleted ...", "I sent ...", "I ran ...") are replaced with
 ``HONESTY_NOTE``. It is a fixed verb list, not a verification engine, and it
 never calls the model again. It can miss paraphrases.
 
-Memory: no new behavior. The loop never calls the legacy memory paths
+Memory (Phase E remediation): the loop never calls the legacy memory paths
 (``_try_save_memory``, ``_finalize_turn_memory``), ``orchestrate_chat_turn`` or
-``execute_tool``. The pipeline records the user message and the final answer in
-the existing history only.
+``execute_tool``, and nothing is saved automatically. A memory is written only
+when the model calls the Phase C ``remember`` tool and the Phase C executor /
+PolicyGate allow it. At turn start ``run_tool_loop`` derives a turn-scoped
+memory authorization from the CURRENT user message alone (the existing
+``memory.intelligence.forgetting.is_explicit_remember_request`` markers:
+"remember that", "remember this", "don't forget", "save this", "keep in
+mind", ...). History, tool results, model output and ``reason`` cannot set or
+change it. Without it the ``remember`` schema is not offered and every call is
+denied. The PolicyGate additionally requires the flag to be ON, refuses
+secrets and only accepts a fact whose words appear in the current user
+message. At most one memory-write call is executed per model output; further
+ones in the same output get a typed ``budget_exceeded`` result (not executed).
+The pipeline records the user message and the final answer in the existing
+history only.
 """
 
 from __future__ import annotations
@@ -91,26 +109,36 @@ audit_logger = logging.getLogger("zoe.tools.audit")
 # ---------------------------------------------------------------------------
 
 FLAG_ENV = "ZOE_TOOL_LOOP"
-_FLAG_ON_VALUES = frozenset({"1", "true", "yes", "on"})
+_FLAG_ON_VALUES = frozenset({"1", "true", "yes", "on"})  # documented ON values
+_FLAG_OFF_VALUES = frozenset({"0", "false", "no", "off"})  # the only values that select legacy
 
 _flag_lock = threading.Lock()
-_flag_cache: bool | None = None
+_flag_cache: bool | None = None  # set at import below (process start)
 
 
 def parse_flag_value(raw: str | None) -> bool:
-    """``True`` only for 1/true/yes/on (case-insensitive); everything else is OFF."""
+    """Phase E: ``False`` only for 0/false/no/off (case-insensitive, trimmed).
+
+    Unset, empty, 1/true/yes/on and unrecognized values are all ON.
+    """
     if not isinstance(raw, str):
-        return False
-    return raw.strip().lower() in _FLAG_ON_VALUES
+        return True
+    return raw.strip().lower() not in _FLAG_OFF_VALUES
 
 
 def is_tool_loop_enabled() -> bool:
-    """Read ``ZOE_TOOL_LOOP`` once per process and cache it (default OFF)."""
+    """Read ``ZOE_TOOL_LOOP`` once per process and cache it (default ON)."""
     global _flag_cache
     with _flag_lock:
         if _flag_cache is None:
             _flag_cache = parse_flag_value(os.environ.get(FLAG_ENV))
         return _flag_cache
+
+
+# Phase E: read at process start (module import). ``run_tool_loop`` also primes
+# the cache before any model or tool code runs, so nothing inside a turn can be
+# the first reader of the variable.
+is_tool_loop_enabled()
 
 
 def reset_tool_loop_flag_for_tests() -> bool:
@@ -288,6 +316,11 @@ class LegacyExecutionBlocked(RuntimeError):
 
 
 _ACTIVE_TURN: contextvars.ContextVar[str | None] = contextvars.ContextVar("zoe_tool_loop_turn", default=None)
+# Turn-scoped memory authorization: the words of the current user message when
+# it carries an explicit remember request, else None. Set only by run_tool_loop.
+_MEMORY_TURN: contextvars.ContextVar[frozenset[str] | None] = contextvars.ContextVar(
+    "zoe_tool_loop_memory_turn", default=None
+)
 _LOOP_LOCK = threading.Lock()  # one active loop authority per process
 _active_count = 0
 _active_lock = threading.Lock()
@@ -304,6 +337,34 @@ def loop_active() -> bool:
         return True
     with _active_lock:
         return _active_count > 0
+
+
+_WORD_RE = re.compile(r"[a-z0-9]+")
+# Filler words a fact may add without them appearing in the user message.
+_GROUNDING_IGNORED = frozenset({"the", "and", "that", "this", "also", "user", "users"})
+
+
+def _memory_turn_words(user_message: str) -> frozenset[str] | None:
+    """Authorization for this turn's memory writes, from the current user message only."""
+    from memory.intelligence.forgetting import is_explicit_remember_request
+
+    if not isinstance(user_message, str) or not is_explicit_remember_request(user_message):
+        return None
+    return frozenset(_WORD_RE.findall(user_message.lower()))
+
+
+def memory_write_authorized() -> bool:
+    """True only inside an active loop turn whose current user message asked to remember."""
+    return _ACTIVE_TURN.get() is not None and _MEMORY_TURN.get() is not None and is_tool_loop_enabled()
+
+
+def memory_fact_grounded(fact: str) -> bool:
+    """Every significant word of ``fact`` must appear in the current user message."""
+    words = _MEMORY_TURN.get()
+    if words is None or not isinstance(fact, str):
+        return False
+    significant = [w for w in _WORD_RE.findall(fact.lower()) if len(w) >= 3 and w not in _GROUNDING_IGNORED]
+    return bool(significant) and all(w in words for w in significant)
 
 
 def guard_legacy_execution(entry_point: str) -> None:
@@ -353,14 +414,18 @@ class ToolLoopResult:
 
 
 def _offered_schemas(registry: Any) -> tuple[dict[str, Any], ...]:
-    """Available tool schemas for this turn; network tools only when B2 allows web."""
+    """Available tool schemas for this turn; network tools only when B2 allows web,
+    the memory tool only when the current user message asked to remember."""
     from plugins.tool_definition import PermissionClass
     from web.policy import current_decision
 
     web_allowed = current_decision().allowed
+    memory_allowed = memory_write_authorized()
     schemas = []
     for definition in registry.available():
         if definition.permission is PermissionClass.NETWORK and not web_allowed:
+            continue
+        if definition.permission is PermissionClass.MEMORY_WRITE and not memory_allowed:
             continue
         schemas.append(definition.wire_schema())
     return tuple(schemas)
@@ -405,6 +470,13 @@ def _malformed_notice(detail: str, turn_id: str, step: int) -> dict[str, Any]:
     }
 
 
+def _is_memory_write(registry: Any, call: Any) -> bool:
+    from plugins.tool_definition import SideEffect
+
+    definition = registry.get(call.tool)
+    return definition is not None and definition.side_effect is SideEffect.MEMORY_WRITE
+
+
 def _budget_envelope(call: Any, budget: str, message: str) -> dict[str, Any]:
     from tools.result_envelope import ErrorType, ResultStatus, error_envelope
 
@@ -436,10 +508,16 @@ def run_tool_loop(
         audit_logger.warning("concurrent_tool_loop_rejected")
         raise NestedToolLoopError("another tool loop is already active")
     global _active_count
+    is_tool_loop_enabled()  # prime the process cache before model/tool code can touch the environment
     from tools.tool_protocol import new_turn_id
 
     turn_id = new_turn_id()
     token = _ACTIVE_TURN.set(turn_id)
+    try:
+        memory_words = _memory_turn_words(user_message)
+    except Exception:  # fail closed: no memory authorization
+        memory_words = None
+    memory_token = _MEMORY_TURN.set(memory_words)
     with _active_lock:
         _active_count += 1
     try:
@@ -447,6 +525,7 @@ def run_tool_loop(
     finally:
         with _active_lock:
             _active_count -= 1
+        _MEMORY_TURN.reset(memory_token)
         _ACTIVE_TURN.reset(token)
         _LOOP_LOCK.release()
 
@@ -545,6 +624,7 @@ def _run(
                 return finish("step_budget")
 
             messages.append({"role": "assistant", "content": _render_calls(parsed.calls)})
+            memory_writes = 0  # at most one memory-write call executes per model output
             for call in parsed.calls:
                 if executed >= limits.max_tool_calls_per_turn:
                     results.append(
@@ -557,6 +637,15 @@ def _run(
                         _budget_envelope(call, "identical_calls", "This exact call was already made too many times; not executed.")
                     )
                     return finish("identical_budget")
+                if _is_memory_write(registry, call):
+                    if memory_writes >= 1:
+                        envelope = _budget_envelope(
+                            call, "memory_writes_per_step", "Only one memory can be saved per reply; not executed."
+                        )
+                        results.append(copy.deepcopy(envelope))
+                        messages.append({"role": "tool", "content": render_tool_response(envelope)})
+                        continue
+                    memory_writes += 1
                 identical[key] = identical.get(key, 0) + 1
                 executed += 1
                 envelope = executor.execute(call)

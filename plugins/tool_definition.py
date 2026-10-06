@@ -19,8 +19,11 @@ Validation is strict and fails at construction time:
 - The result schema must be closed and typed (sizes are bounded afterwards by
   the executor's universal result limits, §24.1).
 - Only read-only (``side_effect: none``) and network-read
-  (``side_effect: network``) tools can be defined. Write, delete, rename,
-  shell, process and git-mutation classes do not exist in Phase C (§14, §26.1).
+  (``side_effect: network``) tools can be defined, plus one narrowly scoped
+  local memory write class (``side_effect: memory_write`` with permission
+  ``memory.write``; Phase E remediation) that the registry accepts only for
+  the ``remember`` tool. File write, delete, rename, shell, process and
+  git-mutation classes do not exist (§14, §26.1).
 - Every tool has a timeout with ``0 < timeout_s <= 120``.
 
 Schemas are deep-frozen (mappings become read-only, lists become tuples) so a
@@ -72,13 +75,19 @@ class ToolDefinitionError(ValueError):
 
 
 class PermissionClass(str, Enum):
-    """What a tool may touch (§9.2). There is deliberately no write/process class."""
+    """What a tool may touch (§9.2). There is deliberately no file-write/process class.
+
+    ``MEMORY_WRITE`` is the single local-write class: it only covers saving one
+    fact through the existing memory store, and only the ``remember`` tool may
+    use it (enforced by the registry and the PolicyGate).
+    """
 
     FILESYSTEM_READ = "filesystem.read"
     COMPUTE = "compute"
     CLOCK = "clock"
     CODE_SEARCH = "code.search"
     NETWORK = "network"
+    MEMORY_WRITE = "memory.write"
 
 
 class TrustClass(str, Enum):
@@ -89,10 +98,15 @@ class TrustClass(str, Enum):
 
 
 class SideEffect(str, Enum):
-    """Allowed side-effect classes in Phase C (§8.1): read-only and network-read only."""
+    """Allowed side-effect classes (§8.1): read-only, network-read and the memory write.
+
+    ``MEMORY_WRITE`` (Phase E remediation) is accepted by the registry only for
+    the ``remember`` tool; there is no file write/delete/rename/process class.
+    """
 
     NONE = "none"
     NETWORK = "network"
+    MEMORY_WRITE = "memory_write"
 
 
 class Availability(str, Enum):
@@ -102,6 +116,8 @@ class Availability(str, Enum):
 
 # Permission classes that may never be combined with a non-network side effect.
 _NETWORK_PERMISSIONS = frozenset({PermissionClass.NETWORK})
+# The memory-write permission and side effect always go together.
+_MEMORY_PERMISSIONS = frozenset({PermissionClass.MEMORY_WRITE})
 
 
 # ---------------------------------------------------------------------------
@@ -373,6 +389,11 @@ class ToolDefinition:
             raise ToolDefinitionError("network permission and network side effect must go together")
         if network_perm and self.trust is not TrustClass.UNTRUSTED_EXTERNAL:
             raise ToolDefinitionError("network tools must produce untrusted_external output")
+        memory_perm = self.permission in _MEMORY_PERMISSIONS
+        if memory_perm != (self.side_effect is SideEffect.MEMORY_WRITE):
+            raise ToolDefinitionError("memory.write permission and memory_write side effect must go together")
+        if memory_perm and self.trust is not TrustClass.UNTRUSTED:
+            raise ToolDefinitionError("memory tools must produce untrusted output")
         if isinstance(self.timeout_s, bool) or not isinstance(self.timeout_s, (int, float)):
             raise ToolDefinitionError("timeout_s must be a number")
         if not math.isfinite(self.timeout_s) or not 0 < self.timeout_s <= MAX_TIMEOUT_S:

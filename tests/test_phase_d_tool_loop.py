@@ -1,4 +1,4 @@
-"""Phase D: bounded model/tool loop behind ZOE_TOOL_LOOP (default OFF).
+"""Phase D: bounded model/tool loop behind ZOE_TOOL_LOOP (Phase E: default ON).
 
 Labels: unit / fixture (temporary workspace) / stubbed-network (the web
 provider is replaced; no real network) / stubbed-model (a scripted model_fn
@@ -8,6 +8,8 @@ ZOE_PHASE_A1_DESIGN.md §3, §7, §8.6, §10.3, §22, §23.5.
 Flag isolation: tests/conftest.py is protected, so every test here starts and
 ends with the flag variable removed and the process cache reset (autouse
 fixture below). No test enables the loop by default for other files.
+Phase E: an absent variable now means ON; tests that need the legacy path set
+an explicit OFF value (``_disable_flag``).
 """
 
 from __future__ import annotations
@@ -72,6 +74,13 @@ def _enable_flag(monkeypatch: pytest.MonkeyPatch, value: str = "1") -> None:
     monkeypatch.setenv(FLAG_ENV, value)
     assert reset_tool_loop_flag_for_tests()
     assert is_tool_loop_enabled()
+
+
+def _disable_flag(monkeypatch: pytest.MonkeyPatch, value: str = "0") -> None:
+    """Phase E: legacy mode needs an explicit OFF value (absent means ON)."""
+    monkeypatch.setenv(FLAG_ENV, value)
+    assert reset_tool_loop_flag_for_tests()
+    assert not is_tool_loop_enabled()
 
 
 class _Net:
@@ -810,6 +819,7 @@ def test_legacy_entry_points_blocked_while_flag_on(monkeypatch) -> None:
 def test_legacy_blocked_inside_an_active_loop_even_with_flag_off(monkeypatch) -> None:
     import tools.executor as legacy_executor
 
+    _disable_flag(monkeypatch)  # Phase E: explicit OFF (absent now means ON)
     assert not is_tool_loop_enabled()
     inner = []
     monkeypatch.setattr(legacy_executor, "_execute_tool", lambda q: inner.append(q) or (True, "legacy"))
@@ -825,6 +835,7 @@ def test_legacy_blocked_inside_an_active_loop_even_with_flag_off(monkeypatch) ->
 def test_legacy_path_unchanged_when_flag_off(monkeypatch) -> None:
     import tools.executor as legacy_executor
 
+    _disable_flag(monkeypatch)  # Phase E: explicit OFF (absent now means ON)
     assert not is_tool_loop_enabled() and not tool_loop.loop_active()
     guard_legacy_execution("test")  # no error
     calls = []
@@ -936,16 +947,26 @@ def test_loop_module_never_calls_legacy_paths() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_flag_absent_is_off() -> None:
+def test_flag_absent_is_on() -> None:
+    # Phase E: was test_flag_absent_is_off (absent -> OFF); absent now means ON.
     assert FLAG_ENV not in os.environ
-    assert is_tool_loop_enabled() is False
+    assert is_tool_loop_enabled() is True
 
 
-@pytest.mark.parametrize("value", ["0", "false", "FALSE", "no", "off", "", "  ", "2", "enabled", "truthy", "1.0"])
-def test_flag_explicit_off_or_unknown_values(monkeypatch, value: str) -> None:
+@pytest.mark.parametrize("value", ["0", "false", "FALSE", "no", "off", " Off ", "NO"])
+def test_flag_explicit_off_values(monkeypatch, value: str) -> None:
+    # Phase E: split from test_flag_explicit_off_or_unknown_values; explicit OFF values stay OFF.
     monkeypatch.setenv(FLAG_ENV, value)
     assert reset_tool_loop_flag_for_tests()
     assert is_tool_loop_enabled() is False
+
+
+@pytest.mark.parametrize("value", ["", "  ", "2", "enabled", "truthy", "1.0"])
+def test_flag_empty_or_unknown_values_are_on(monkeypatch, value: str) -> None:
+    # Phase E: these values asserted OFF in Phase D; empty/unrecognized now mean ON.
+    monkeypatch.setenv(FLAG_ENV, value)
+    assert reset_tool_loop_flag_for_tests()
+    assert is_tool_loop_enabled() is True
 
 
 @pytest.mark.parametrize("value", ["1", "true", "TRUE", "True", "yes", "YES", "on", "On", " on "])
@@ -963,7 +984,11 @@ def test_flag_is_read_once_and_cached(monkeypatch) -> None:
     monkeypatch.delenv(FLAG_ENV)
     assert is_tool_loop_enabled() is True
     assert reset_tool_loop_flag_for_tests()
-    assert is_tool_loop_enabled() is False
+    assert is_tool_loop_enabled() is True  # Phase E: absent -> ON (was: is False)
+    monkeypatch.setenv(FLAG_ENV, "0")
+    assert is_tool_loop_enabled() is True  # still cached
+    assert reset_tool_loop_flag_for_tests()
+    assert is_tool_loop_enabled() is False  # explicit OFF after a reset
 
 
 def test_flag_isolation_starts_clean() -> None:
@@ -972,10 +997,13 @@ def test_flag_isolation_starts_clean() -> None:
     assert not tool_loop.loop_active()
 
 
-def test_no_default_on_harness() -> None:
-    for rel in ("tests/conftest.py", "pytest.ini"):
-        assert FLAG_ENV not in (REPO / rel).read_text(encoding="utf-8")
-    assert tool_loop.parse_flag_value(None) is False
+def test_harness_only_sets_pytest_legacy_default() -> None:
+    # Phase E: was test_no_default_on_harness. Production default is now ON; the
+    # only harness change is the pytest-only plugin that setdefaults OFF.
+    assert FLAG_ENV not in (REPO / "tests" / "conftest.py").read_text(encoding="utf-8")
+    ini = (REPO / "pytest.ini").read_text(encoding="utf-8")
+    assert "addopts = -p zoe_test_defaults" in ini and f"{FLAG_ENV}=" not in ini
+    assert tool_loop.parse_flag_value(None) is True
 
 
 # ---------------------------------------------------------------------------
@@ -1034,6 +1062,7 @@ def _forbid(monkeypatch, target: str, name: str) -> None:
 def test_pipeline_off_uses_legacy_path(monkeypatch) -> None:
     import brain.pipeline as pipeline
 
+    _disable_flag(monkeypatch)  # Phase E: explicit OFF (absent now means ON)
     assert not is_tool_loop_enabled()
     monkeypatch.setattr(pipeline, "_generate_response_for_turn", lambda prompt, max_new_tokens=256: "legacy reply")
     monkeypatch.setattr(pipeline, "_generate_tool_loop_response", lambda *a, **k: pytest.fail("loop used with flag off"))
@@ -1060,9 +1089,13 @@ def test_pipeline_on_routes_through_tool_loop_only(monkeypatch) -> None:
     _forbid(monkeypatch, "brain.pipeline.generate_text", "generate_text")
     _forbid(monkeypatch, "agents.orchestrator.orchestrate_chat_turn", "orchestrate_chat_turn")
     _forbid(monkeypatch, "agents.orchestrator.finalize_conversation_memory", "finalize_conversation_memory")
-    _forbid(monkeypatch, "plugins.manager.initialize_plugins", "initialize_plugins")
+    # Phase E: plugin initialisation (discovery only) is restored on the loop path;
+    # Phase D forbade it here. It must run once and execute nothing.
+    plugin_inits = []
+    monkeypatch.setattr("plugins.manager.initialize_plugins", lambda **_k: plugin_inits.append(1))
 
     reply = pipeline.generate_response("what is 2 + 2")
+    assert plugin_inits == [1]
     assert reply == "It is 4."
     assert calc_calls == ["2 + 2"]  # executed exactly once, by the loop
     assert recorded == [("what is 2 + 2", "It is 4.")]
