@@ -48,8 +48,23 @@ def _model_device(loaded_model: PreTrainedModel) -> torch.device:
 def _format_prompt(
     loaded_tokenizer: PreTrainedTokenizerBase,
     messages: list[dict[str, str]],
+    tools: list[dict[str, Any]] | None = None,
 ) -> str:
-    """Format chat messages with the tokenizer chat template when supported."""
+    """Format chat messages with the tokenizer chat template when supported.
+
+    ``tools`` (Phase D tool loop only) passes the offered tool schemas to the
+    chat template. Tool turns require a chat template: without one the turn
+    fails safely instead of degrading to the last message.
+    """
+    if tools is not None:
+        if not getattr(loaded_tokenizer, "chat_template", None):
+            raise RuntimeError("tool turns need a tokenizer chat template")
+        return loaded_tokenizer.apply_chat_template(
+            messages,
+            tools=tools,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
     if getattr(loaded_tokenizer, "chat_template", None):
         return loaded_tokenizer.apply_chat_template(
             messages,
@@ -216,9 +231,13 @@ def generate_text(
     loaded_model: PreTrainedModel,
     messages: list[dict[str, str]],
     max_new_tokens: int = 256,
+    tools: list[dict[str, Any]] | None = None,
 ) -> str:
-    """Generate assistant text from formatted chat messages."""
-    text = _format_prompt(loaded_tokenizer, messages)
+    """Generate assistant text from formatted chat messages.
+
+    ``tools`` is only passed by the Phase D tool loop; legacy calls are unchanged.
+    """
+    text = _format_prompt(loaded_tokenizer, messages, tools)
     device = _model_device(loaded_model)
     inputs: Any = loaded_tokenizer(text, return_tensors="pt").to(device)
 

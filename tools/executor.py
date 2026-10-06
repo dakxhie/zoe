@@ -92,7 +92,13 @@ def execute_tool(query: str) -> tuple[bool, str]:
     Phase B3: nothing escapes this boundary. Typed tool errors keep their own
     safe messages; any unexpected exception ends the tool step with a fixed
     safe message (no traceback, no exception text).
+
+    Phase D: legacy free-text execution; blocked while the tool loop owns
+    execution (``ZOE_TOOL_LOOP`` ON or a loop active).
     """
+    from tools.tool_loop import guard_legacy_execution
+
+    guard_legacy_execution("tools.executor.execute_tool")
     try:
         return _execute_tool(query)
     except Exception as exc:

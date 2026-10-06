@@ -89,6 +89,9 @@ def _format_autonomous_reply(summary: "ExecutionSummary") -> str:
 
 def orchestrate_chat_turn(prompt: str) -> OrchestratedTurn:
     """Run intent analysis, planning, execution, verification, and prompt building."""
+    from tools.tool_loop import guard_legacy_execution
+
+    guard_legacy_execution("agents.orchestrator.orchestrate_chat_turn")  # Phase D: legacy-only
     total_start = time.perf_counter()
     state = AgentState(conversation_id=str(uuid.uuid4()), goal=prompt)
 

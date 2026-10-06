@@ -160,6 +160,10 @@ class PluginRegistry:
         return None
 
     def execute_route(self, query: str, route_id: str) -> tuple[bool, str]:
+        from tools.tool_loop import guard_legacy_execution
+
+        # Phase D: free-text plugin execution is legacy-only.
+        guard_legacy_execution("plugins.registry.execute_route")
         plugin = self.find_executor_for_route(route_id)
         if plugin is None or plugin.execute_query is None:
             return False, ""

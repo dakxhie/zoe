@@ -12,6 +12,7 @@ from tools.executor import execute_tool
 from brain.context import (
     MEMORY_ACKNOWLEDGEMENT,
     _build_chat_messages,
+    _build_system_content,
     _log_turn_debug,
     _retrieve_vision,
     build_vision_context,
@@ -43,6 +44,9 @@ def _prepare_chat_session() -> None:
 
 def _try_save_memory(text: str) -> bool:
     """Attempt to store a conversation memory without interrupting chat."""
+    from tools.tool_loop import guard_legacy_execution
+
+    guard_legacy_execution("brain.pipeline._try_save_memory")  # Phase D: legacy-only
     try:
         return save_memory(text)
     except Exception as exc:
@@ -52,6 +56,9 @@ def _try_save_memory(text: str) -> bool:
 
 def _finalize_turn_memory(user_prompt: str, assistant_reply: str) -> None:
     """Run post-turn memory intelligence (scoring, review, reinforcement)."""
+    from tools.tool_loop import guard_legacy_execution
+
+    guard_legacy_execution("brain.pipeline._finalize_turn_memory")  # Phase D: legacy-only
     try:
         from agents.orchestrator import finalize_conversation_memory
         from tools.router import route_query
@@ -142,6 +149,9 @@ def _handle_explicit_web_turn(prompt: str, max_new_tokens: int) -> str | None:
     Returns ``None`` for every other turn. Non-explicit turns never reach the
     network: the single decision in ``web.policy`` denies them.
     """
+    from tools.tool_loop import guard_legacy_execution
+
+    guard_legacy_execution("brain.pipeline._handle_explicit_web_turn")  # Phase D: legacy-only
     from tools.result_envelope import ErrorType
     from web.policy import (
         DIAG_OFFLINE,
@@ -183,15 +193,54 @@ def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
 
     Phase B2: the web authorization decision is computed once from this prompt
     (the current user message) and discarded when the turn ends.
+
+    Phase D: with ``ZOE_TOOL_LOOP`` ON (default OFF) the turn goes through the
+    bounded tool loop, the only execution authority; the legacy path below is
+    not called. With the flag OFF the legacy path is unchanged.
     """
+    from tools.tool_loop import is_tool_loop_enabled
     from web.policy import web_turn
 
     with web_turn(prompt):
+        if is_tool_loop_enabled():
+            return _generate_tool_loop_response(prompt, max_new_tokens=max_new_tokens)
         return _generate_response_for_turn(prompt, max_new_tokens=max_new_tokens)
+
+
+def _tool_loop_model(max_new_tokens: int):
+    """The model callable used by the tool loop (one generation per invocation)."""
+
+    def model_fn(messages: list[dict], tools: list[dict]) -> str:
+        loaded_tokenizer, loaded_model = load_model()
+        return generate_text(loaded_tokenizer, loaded_model, messages, max_new_tokens=max_new_tokens, tools=tools)
+
+    return model_fn
+
+
+def _generate_tool_loop_response(prompt: str, max_new_tokens: int = 256) -> str:
+    """Phase D turn: system + offered tool schemas + existing history + current message.
+
+    No legacy execution, retrieval or memory paths run here; only the user
+    message and the final answer are recorded in the existing history.
+    """
+    from tools.tool_loop import run_tool_loop
+
+    history = get_history(max_messages=20)
+    result = run_tool_loop(
+        prompt,
+        model_fn=_tool_loop_model(max_new_tokens),
+        history=history,
+        system_prompt=_build_system_content(""),
+    )
+    _record_exchange(prompt, result.text)
+    return result.text
 
 
 def _generate_response_for_turn(prompt: str, max_new_tokens: int = 256) -> str:
     """Generate the reply for one user turn (web decision already scoped)."""
+    from tools.tool_loop import guard_legacy_execution
+
+    guard_legacy_execution("brain.pipeline._generate_response_for_turn")  # Phase D: legacy-only
     from plugins.events import Event, emit
     from plugins.manager import initialize_plugins
 
