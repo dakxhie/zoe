@@ -9,6 +9,7 @@ before it leaves these functions.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from tools.fs_policy import (
@@ -34,6 +35,8 @@ __all__ = [
     "find_file",
     "list_files",
     "read_file",
+    "read_file_window",
+    "ReadWindow",
     "search_text",
 ]
 
@@ -98,8 +101,36 @@ def list_files(path: str = ".") -> str:
     return _with_footer(file_paths, stats, truncated_at)
 
 
-def read_file(path: str, max_lines: int = 200) -> str:
-    """Read the first lines of a UTF-8 text file up to 2 MB, with secrets redacted."""
+@dataclass(frozen=True)
+class ReadWindow:
+    """A line window of a checked, redacted UTF-8 file (Phase C ``read_file`` tool)."""
+
+    path: str  # workspace-relative
+    lines: tuple[str, ...]  # selected lines (redacted, long lines cut)
+    start_line: int  # 1-based first returned line
+    end_line: int  # 1-based last returned line (start_line - 1 when empty)
+    total_lines: int
+    redacted_lines: int  # redacted lines in the whole file
+
+    @property
+    def truncated(self) -> bool:
+        """True when lines exist after the returned window."""
+        return self.end_line < self.total_lines
+
+    @property
+    def redactions_in_window(self) -> int:
+        return sum(1 for line in self.lines if line == REDACTED_LINE)
+
+
+def read_file_window(path: str, start_line: int = 1, max_lines: int = 200) -> ReadWindow:
+    """Read a line window of a UTF-8 text file up to 2 MB, with secrets redacted.
+
+    Every B1 check runs on the WHOLE file before any slicing: workspace
+    containment, symlink escape, hidden / sensitive / internal-state paths,
+    the 2 MB size limit, binary and UTF-8 checks, the ``.env`` template check
+    and the private-key / secret scan. Only then is the window selected, so a
+    window can never be used to read around a blocked file.
+    """
     ws = get_workspace_root()
     file_path = _resolve_file(path, ws)
     data = read_bytes_no_follow(file_path, path, MAX_FILE_SIZE_BYTES)
@@ -117,23 +148,51 @@ def read_file(path: str, max_lines: int = 200) -> str:
             f"Access denied: '{path}' contains a private key", "sensitive_content"
         )
 
-    limit = max(1, min(int(max_lines), MAX_READ_LINES))
-    lines = scan.text.splitlines()
-    selected = [
-        line if len(line) <= MAX_LINE_CHARS else line[:MAX_LINE_CHARS] + " ... [line truncated]"
-        for line in lines[:limit]
-    ]
-    content = "\n".join(selected)
-
-    if len(lines) > limit:
-        content += f"\n\n... truncated to first {limit} lines ..."
     if scan.redacted_lines:
         # Phase B2 (A.1 §6.4): keyed fingerprints only; the values are not kept.
         from tools.session_markers import record_redacted_lines
 
         record_redacted_lines([line for line in text.splitlines() if line_has_secret(line)])
+
+    limit = max(1, min(int(max_lines), MAX_READ_LINES))
+    first = max(1, int(start_line))
+    lines = scan.text.splitlines()
+    total = len(lines)
+    if first > max(total, 1):
+        raise FilesystemError(
+            f"start_line {first} is past the end of the file ({total} lines)", "invalid_argument"
+        )
+    selected = tuple(
+        line if len(line) <= MAX_LINE_CHARS else line[:MAX_LINE_CHARS] + " ... [line truncated]"
+        for line in lines[first - 1 : first - 1 + limit]
+    )
+    return ReadWindow(
+        path=_relative(file_path, ws),
+        lines=selected,
+        start_line=first,
+        end_line=first - 1 + len(selected),
+        total_lines=total,
+        redacted_lines=scan.redacted_lines,
+    )
+
+
+def read_file(path: str, max_lines: int = 200, start_line: int = 1) -> str:
+    """Read lines of a UTF-8 text file up to 2 MB, with secrets redacted (legacy text form)."""
+    window = read_file_window(path, start_line=start_line, max_lines=max_lines)
+    limit = max(1, min(int(max_lines), MAX_READ_LINES))
+    content = "\n".join(window.lines)
+
+    if window.truncated:
+        if window.start_line == 1:
+            content += f"\n\n... truncated to first {limit} lines ..."
+        else:
+            content += (
+                f"\n\n... showing lines {window.start_line}-{window.end_line} "
+                f"of {window.total_lines} ..."
+            )
+    if window.redacted_lines:
         content += (
-            f"\n\n[redacted {scan.redacted_lines} line(s) containing possible secrets]"
+            f"\n\n[redacted {window.redacted_lines} line(s) containing possible secrets]"
         )
 
     return content

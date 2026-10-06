@@ -26,8 +26,11 @@ class ChromaError(RuntimeError):
     """Raised when shared ChromaDB operations fail."""
 
 
-def get_chroma_path() -> Path:
-    """Return the absolute path to the persistent ChromaDB directory."""
+CHROMA_SQLITE_NAME = "chroma.sqlite3"
+
+
+def resolve_chroma_path() -> Path:
+    """Return the absolute ChromaDB directory path without creating anything."""
     settings = load_settings()
     db_path = settings.get("MEMORY_DB", "storage/chroma")
     chroma_path = Path(db_path)
@@ -35,8 +38,51 @@ def get_chroma_path() -> Path:
     if not chroma_path.is_absolute():
         chroma_path = ROOT / chroma_path
 
+    return chroma_path
+
+
+def get_chroma_path() -> Path:
+    """Return the absolute path to the persistent ChromaDB directory."""
+    chroma_path = resolve_chroma_path()
     chroma_path.mkdir(parents=True, exist_ok=True)
     return chroma_path
+
+
+# --- Read-only guard (Phase C) ------------------------------------------------
+#
+# Read-only callers (``codebase.retriever.search_code``) must never create a
+# missing store: no directory, no SQLite database, no collection. These helpers
+# only *look*; they open the shared client solely when a store already exists,
+# and they never call ``get_or_create_collection``.
+
+
+def chroma_store_exists(path: Path | None = None) -> bool:
+    """True when a persistent Chroma store already exists (directory + SQLite file)."""
+    chroma_path = path if path is not None else resolve_chroma_path()
+    try:
+        return chroma_path.is_dir() and (chroma_path / CHROMA_SQLITE_NAME).is_file()
+    except OSError:
+        return False
+
+
+def get_existing_collection(name: str) -> Collection | None:
+    """Return an existing collection, or ``None`` when the store or collection is missing.
+
+    Never creates the store directory, the SQLite database or the collection.
+    """
+    if _client is None and not chroma_store_exists():
+        return None
+    client = get_chroma_client()
+    try:
+        names = {_collection_name_from_list_entry(item) for item in client.list_collections()}
+    except Exception as exc:
+        raise ChromaError(f"Could not list ChromaDB collections: {type(exc).__name__}") from exc
+    if name not in names:
+        return None
+    try:
+        return client.get_collection(name=name)
+    except Exception as exc:
+        raise ChromaError(f"Could not open ChromaDB collection '{name}': {type(exc).__name__}") from exc
 
 
 def get_chroma_client() -> chromadb.PersistentClient:

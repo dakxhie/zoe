@@ -6,7 +6,7 @@ from typing import Any, TypedDict
 
 from chromadb.api.models.Collection import Collection
 
-from core.chroma import ChromaError, get_collection
+from core.chroma import ChromaError, get_existing_collection
 from rag.embedder import embed_texts
 
 COLLECTION_NAME = "zoe_code"
@@ -25,10 +25,15 @@ class CodeRetrieverError(RuntimeError):
     """Raised when code search fails."""
 
 
-def _get_collection() -> Collection:
-    """Get or create the Zoe code collection."""
+def _get_collection() -> Collection | None:
+    """Return the existing Zoe code collection, or ``None`` when it does not exist.
+
+    Phase C: search is read-only. A missing Chroma store (or a missing
+    ``zoe_code`` collection) is never created here; indexing
+    (``codebase.indexer``) remains the only writer.
+    """
     try:
-        return get_collection(COLLECTION_NAME)
+        return get_existing_collection(COLLECTION_NAME)
     except ChromaError as exc:
         raise CodeRetrieverError(str(exc)) from exc
 
@@ -57,6 +62,8 @@ def _format_search_results(results: dict[str, Any]) -> list[CodeSearchResult]:
 def search_code(query: str, top_k: int = 5) -> list[CodeSearchResult]:
     """Return the most relevant indexed code chunks for a query."""
     collection = _get_collection()
+    if collection is None:
+        return []
     code_count = collection.count()
 
     if code_count == 0:

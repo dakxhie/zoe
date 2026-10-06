@@ -2,8 +2,8 @@
 
 This is the single authoritative bounding mechanism for tool results. Phase B2
 routes web results (``web_search`` and page fetches, ``fetch_page``) through it;
-the future ToolExecutor (Phase C) is meant to call the same ``bound_result`` for
-every tool.
+the Phase C ToolExecutor (``tools.tool_protocol``) calls the same
+``bound_result`` for every tool.
 
 Order (§24.1): tool-specific limits -> depth -> keys -> items -> strings ->
 serialized bytes -> tokens. Truncation keeps ``status: success`` and sets
@@ -320,13 +320,19 @@ def bound_result(
     source: dict[str, Any] | None = None,
     metadata: dict[str, Any] | None = None,
     limits: GlobalLimits = GLOBAL_LIMITS,
+    tool_limits: ToolLimits | None = None,
+    call_id: str | None = None,
 ) -> dict[str, Any]:
     """Bound a successful tool payload and return its envelope.
 
     Never raises for oversized or malformed payloads: those become a
-    ``result_unrepresentable`` error envelope.
+    ``result_unrepresentable`` error envelope. ``tool_limits`` (Phase C: the
+    tool definition's own limits) replaces the ``TOOL_LIMITS`` entry; it can
+    only tighten, never loosen, the global ``limits``. ``call_id`` (Phase C:
+    the orchestrator-generated ``ToolCall.id``) is echoed in the envelope.
     """
-    tool_limits = TOOL_LIMITS.get(tool, ToolLimits())
+    if tool_limits is None:
+        tool_limits = TOOL_LIMITS.get(tool, ToolLimits())
     base_meta = dict(metadata or {})
 
     def _unrepresentable(reason: str) -> dict[str, Any]:
@@ -345,6 +351,7 @@ def bound_result(
             "The result could not be represented within Zoe's result limits.",
             trust=trust,
             source=safe_source,
+            call_id=call_id,
             metadata={**base_meta, "unrepresentable_reason": reason},
         )
 
@@ -422,6 +429,7 @@ def bound_result(
             source=source,
             truncated=truncated,
             truncation=truncation,
+            call_id=call_id,
             metadata={**base_meta, "bytes": sizes[0], "tokens": sizes[1]},
         )
 
