@@ -128,6 +128,10 @@ def read_file(path: str, max_lines: int = 200) -> str:
     if len(lines) > limit:
         content += f"\n\n... truncated to first {limit} lines ..."
     if scan.redacted_lines:
+        # Phase B2 (A.1 §6.4): keyed fingerprints only; the values are not kept.
+        from tools.session_markers import record_redacted_lines
+
+        record_redacted_lines([line for line in text.splitlines() if line_has_secret(line)])
         content += (
             f"\n\n[redacted {scan.redacted_lines} line(s) containing possible secrets]"
         )
@@ -207,6 +211,10 @@ def search_text(text: str, root: str = ".") -> str:
             if line_has_secret(line):
                 redacted += 1
                 shown = REDACTED_LINE
+                # Phase B2 (A.1 §6.4): keyed fingerprints only; the value is not kept.
+                from tools.session_markers import record_redacted_lines
+
+                record_redacted_lines([line])
             else:
                 shown = line.strip()
                 if len(shown) > MAX_MATCH_LINE_CHARS:

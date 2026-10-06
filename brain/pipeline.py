@@ -136,8 +136,62 @@ def generate_image_response(
     return reply
 
 
+def _handle_explicit_web_turn(prompt: str, max_new_tokens: int) -> str | None:
+    """Handle a turn whose current message explicitly asked for web access (Phase B2).
+
+    Returns ``None`` for every other turn. Non-explicit turns never reach the
+    network: the single decision in ``web.policy`` denies them.
+    """
+    from tools.result_envelope import ErrorType
+    from web.policy import (
+        DIAG_OFFLINE,
+        DIAG_QUERY_UNBUILDABLE,
+        blocked_notice,
+        current_decision,
+        decorate_web_reply,
+    )
+
+    decision = current_decision()
+    if not decision.explicit_intent:
+        return None
+
+    if (
+        decision.error_type is ErrorType.EGRESS_BLOCKED_SENSITIVE
+        or decision.diagnostic == DIAG_QUERY_UNBUILDABLE
+    ):
+        return _complete_turn(prompt, blocked_notice(decision))
+
+    from brain.context import WEB_NOT_USED_INSTRUCTION
+
+    loaded_tokenizer, loaded_model = load_model()
+    history = get_history(max_messages=20)
+
+    if decision.diagnostic == DIAG_OFFLINE:
+        messages = _build_chat_messages(prompt, history, selected_route="chat")
+        messages[0]["content"] = f"{messages[0]['content']}\n\n{WEB_NOT_USED_INSTRUCTION}"
+        reply = generate_text(loaded_tokenizer, loaded_model, messages, max_new_tokens=max_new_tokens)
+        return _complete_turn(prompt, f"{blocked_notice(decision)}\n\n{reply}".strip())
+
+    # Authorized: the single web route performs the one gated search for this turn.
+    messages = _build_chat_messages(prompt, history, selected_route="web")
+    reply = generate_text(loaded_tokenizer, loaded_model, messages, max_new_tokens=max_new_tokens)
+    return _complete_turn(prompt, decorate_web_reply(reply))
+
+
 def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
-    """Generate an assistant reply for the given user prompt."""
+    """Generate an assistant reply for the given user prompt.
+
+    Phase B2: the web authorization decision is computed once from this prompt
+    (the current user message) and discarded when the turn ends.
+    """
+    from web.policy import web_turn
+
+    with web_turn(prompt):
+        return _generate_response_for_turn(prompt, max_new_tokens=max_new_tokens)
+
+
+def _generate_response_for_turn(prompt: str, max_new_tokens: int = 256) -> str:
+    """Generate the reply for one user turn (web decision already scoped)."""
     from plugins.events import Event, emit
     from plugins.manager import initialize_plugins
 
@@ -160,6 +214,10 @@ def generate_response(prompt: str, max_new_tokens: int = 256) -> str:
         _record_exchange(prompt, reply)
         _emit_conversation_finished(prompt, reply)
         return reply
+
+    web_reply = _handle_explicit_web_turn(prompt, max_new_tokens)
+    if web_reply is not None:
+        return web_reply
 
     handled, tool_result = execute_tool(prompt)
     if handled:

@@ -107,6 +107,15 @@ def _dispatch_action(action: str, query: str) -> tuple[str, str]:
         from web.retriever import retrieve_web_context
 
         text = retrieve_web_context(query, max_pages=2)
+        if not text.strip():
+            from web.policy import current_web_state
+
+            state = current_web_state()
+            if state.denied:
+                raise PermissionError(
+                    f"permission denied: web research not performed ({state.label})"
+                )
+            raise RuntimeError(f"Web research returned no usable content ({state.label})")
         return ("Web research complete.", text[:3000])
 
     if action == "memory_snapshot":

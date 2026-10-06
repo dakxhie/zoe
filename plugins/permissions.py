@@ -30,11 +30,17 @@ def normalize_permissions(values: tuple[str, ...] | list[str]) -> frozenset[str]
     return frozenset(value.strip().lower() for value in values if value.strip())
 
 
+# Phase B2 (A.1 N5): UNSAFE no longer implies network access. Network permissions
+# must be granted explicitly, and even then web access still requires the
+# per-turn authorization decided in ``web.policy``.
+NETWORK_PERMISSIONS: frozenset[str] = frozenset({Permission.INTERNET.value, Permission.WEB.value})
+
+
 def has_permission(granted: frozenset[str], required: Permission | str) -> bool:
     key = required.value if isinstance(required, Permission) else required.lower()
     if key in granted:
         return True
-    if Permission.UNSAFE.value in granted:
+    if Permission.UNSAFE.value in granted and key not in NETWORK_PERMISSIONS:
         return True
     return False
 

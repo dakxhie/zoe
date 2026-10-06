@@ -19,12 +19,20 @@ class SessionInfo:
 _active_session_id: str | None = None
 
 
+def _clear_session_markers() -> None:
+    """Phase B2: in-memory sensitive-content markers end with the session."""
+    from tools.session_markers import reset_session_markers
+
+    reset_session_markers()
+
+
 def create_session() -> str:
     """Create a new session id for the current chat launch."""
     global _active_session_id
 
     session_id = str(uuid.uuid4())
     _active_session_id = session_id
+    _clear_session_markers()
     write_json_file(
         SESSION_FILE,
         {
@@ -70,3 +78,4 @@ def reset_active_session() -> None:
     """Clear the in-process active session cache."""
     global _active_session_id
     _active_session_id = None
+    _clear_session_markers()

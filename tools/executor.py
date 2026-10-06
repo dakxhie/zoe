@@ -59,6 +59,12 @@ def _execute_filesystem(query: str) -> tuple[bool, str]:
                     raise FilesystemError("Search text is required")
                 return True, search_text(argument)
         except FilesystemError as exc:
+            if getattr(exc, "error_type", "") in {"sensitive_path", "sensitive_content"} and argument:
+                # Phase B2 (A.1 §6.4): remember (as keyed fingerprints) that this
+                # path was refused, so it cannot later leave in a web query.
+                from tools.session_markers import record_sensitive_path
+
+                record_sensitive_path(argument)
             return True, str(exc)
 
     return False, ""
